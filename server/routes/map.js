@@ -3,6 +3,7 @@
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
+const { finished } = require("stream");
 const {
   handleUnexpectedError,
   getTmpFile,
@@ -125,12 +126,17 @@ module.exports = ({ roleMiddleware, maps, settings, emitter }) => {
     });
 
     req.busboy.once("close", () => {
-      maps
-        .updateMapImage(req.params.id, { filePath: tmpFile, fileExtension })
-        .then((map) => {
-          res.status(200).json({ error: null, data: mapMap(map) });
-        })
-        .catch(handleUnexpectedError(res));
+      if (writeStream === null) return;
+      // busboy closes before the file is flushed to disk
+      finished(writeStream, (err) => {
+        if (err) return handleUnexpectedError(res)(err);
+        maps
+          .updateMapImage(req.params.id, { filePath: tmpFile, fileExtension })
+          .then((map) => {
+            res.status(200).json({ error: null, data: mapMap(map) });
+          })
+          .catch(handleUnexpectedError(res));
+      });
     });
   });
 
@@ -150,16 +156,21 @@ module.exports = ({ roleMiddleware, maps, settings, emitter }) => {
     });
 
     req.busboy.once("close", () => {
-      maps
-        .updateFogProgressImage(req.params.id, tmpFile)
-        .then((map) => {
-          emitter.emit("invalidate", `Map:${map.id}`);
-          res.status(200).json({
-            error: null,
-            data: mapMap(map),
-          });
-        })
-        .catch(handleUnexpectedError(res));
+      if (writeStream === null) return;
+      // busboy closes before the file is flushed to disk
+      finished(writeStream, (err) => {
+        if (err) return handleUnexpectedError(res)(err);
+        maps
+          .updateFogProgressImage(req.params.id, tmpFile)
+          .then((map) => {
+            emitter.emit("invalidate", `Map:${map.id}`);
+            res.status(200).json({
+              error: null,
+              data: mapMap(map),
+            });
+          })
+          .catch(handleUnexpectedError(res));
+      });
     });
   });
 
@@ -180,14 +191,19 @@ module.exports = ({ roleMiddleware, maps, settings, emitter }) => {
     });
 
     req.busboy.once("close", () => {
-      maps
-        .updateFogLiveImage(req.params.id, tmpFile)
-        .then((map) => {
-          settings.set("currentMapId", map.id);
-          emitter.emit("invalidate", "Query.activeMap");
-          res.json({ error: null, data: mapMap(map) });
-        })
-        .catch(handleUnexpectedError(res));
+      if (writeStream === null) return;
+      // busboy closes before the file is flushed to disk
+      finished(writeStream, (err) => {
+        if (err) return handleUnexpectedError(res)(err);
+        maps
+          .updateFogLiveImage(req.params.id, tmpFile)
+          .then((map) => {
+            settings.set("currentMapId", map.id);
+            emitter.emit("invalidate", "Query.activeMap");
+            res.json({ error: null, data: mapMap(map) });
+          })
+          .catch(handleUnexpectedError(res));
+      });
     });
   });
 
