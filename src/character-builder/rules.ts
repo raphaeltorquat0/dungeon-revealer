@@ -30,6 +30,8 @@ export type Character = {
   id: string;
   name: string;
   player?: string;
+  /** Retrato reduzido, como data URL. */
+  portrait?: string;
   speciesId?: string;
   backgroundId?: string;
   abilityMethod: "standard" | "pointbuy" | "roll" | "manual";

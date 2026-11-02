@@ -4,3 +4,7 @@ data
 build
 server-build
 bin
+
+# gerados por character-builder/scripts
+public/fichas.html
+public/srd52.json

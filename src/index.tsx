@@ -36,11 +36,6 @@ const urlSearchParameter = new URLSearchParams(window.location.search);
 const main = async () => {
   let component = null;
   switch (pathname) {
-    case "/fichas": {
-      const { CharacterBuilderApp } = await import("./character-builder/app");
-      component = <CharacterBuilderApp />;
-      break;
-    }
     case "/dm": {
       const { DmArea } = await import("./dm-area/dm-area");
       component = <DmArea />;

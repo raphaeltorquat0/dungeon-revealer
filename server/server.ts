@@ -240,8 +240,9 @@ export const bootstrapServer = async (env: ReturnType<typeof getEnv>) => {
     res.send(indexHtmlContent);
   });
 
+  // ficha de personagem: arquivo único gerado por character-builder/scripts/build_ficha.js
   app.get("/fichas", (_, res) => {
-    res.send(indexHtmlContent);
+    res.sendFile(path.join(env.PUBLIC_PATH, "fichas.html"));
   });
 
   // Consider all URLs under /public/ as static files, and return them raw.
