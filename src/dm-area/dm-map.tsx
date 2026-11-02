@@ -25,6 +25,8 @@ import graphql from "babel-plugin-relay/macro";
 import { ReactRelayContext, useFragment, useMutation } from "relay-hooks";
 import * as Icon from "../feather-icons";
 import { Toolbar } from "../toolbar";
+import { animated, to } from "@react-spring/web";
+import { ChatPositionContext } from "../authenticated-app-shell";
 import type { MapTool } from "../map-tools/map-tool";
 import { DragPanZoomMapTool } from "../map-tools/drag-pan-zoom-map-tool";
 import {
@@ -623,6 +625,7 @@ export const DmMap = (props: {
   controlRef: React.MutableRefObject<MapControlInterface | null>;
 }): React.ReactElement => {
   const map = useFragment(DMMapFragment, props.map);
+  const chatPosition = React.useContext(ChatPositionContext);
   const [mapPing] = useMutation<dmMap_MapPingMutation>(MapPingMutation);
   const controlRef = props.controlRef;
 
@@ -912,7 +915,15 @@ export const DmMap = (props: {
               </Toolbar.Group>
             </Toolbar>
           </LeftToolbarContainer>
-          <BottomToolbarContainer>
+          <BottomToolbarContainer
+            style={{
+              // keep the toolbar (and the Send button) clear of the chat panel
+              right:
+                chatPosition !== null
+                  ? to(chatPosition.x, (x) => chatPosition.width - x)
+                  : 0,
+            }}
+          >
             <Toolbar horizontal>
               <Toolbar.Group>
                 <GridSettingButton
@@ -1058,10 +1069,11 @@ const LeftToolbarContainer = styled.div`
   }
 `;
 
-const BottomToolbarContainer = styled.div`
+const BottomToolbarContainer = styled(animated.div)`
   display: flex;
   justify-content: center;
-  width: 100%;
+  left: 0;
+  row-gap: 8px;
   position: absolute;
   bottom: 12px;
   pointer-events: none;

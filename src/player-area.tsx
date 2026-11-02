@@ -380,7 +380,8 @@ const PlayerMap = ({
         )
       ) : (
         <AbsoluteFullscreenContainer>
-          <SplashScreen text="Ready." />
+          {/* the projector lights up the table: stay black until a map is sent */}
+          {isMapOnly ? null : <SplashScreen text="Ready." />}
         </AbsoluteFullscreenContainer>
       )}
     </>
@@ -472,7 +473,7 @@ export const PlayerArea: React.FC<{
   );
 
   if (mode === "LOADING") {
-    return <SplashScreen text="Loading..." />;
+    return props.isMapOnly ? null : <SplashScreen text="Loading..." />;
   }
 
   if (mode === "AUTHENTICATE") {
