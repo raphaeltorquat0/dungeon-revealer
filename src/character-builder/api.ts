@@ -36,9 +36,16 @@ const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
       "Content-Type": "application/json",
       ...(init.headers ?? {}),
     },
+  }).catch(() => {
+    throw new Error(
+      "Sem conexão com o computador do mestre. Confira se o celular está no mesmo Wi-Fi e se a mesa está aberta."
+    );
   });
   if (res.status === 401) throw new Error("SENHA");
-  if (!res.ok) throw new Error(`Erro ${res.status} ao falar com o servidor.`);
+  if (!res.ok)
+    throw new Error(
+      `O servidor da mesa respondeu com erro ${res.status}. Tente recarregar.`
+    );
   return (await res.json()).data as T;
 };
 

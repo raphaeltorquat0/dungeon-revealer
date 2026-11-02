@@ -94,37 +94,28 @@ export const DecisionEditor = ({
             : `Escolha ${limit}: ${chosen.length} de ${limit}.`}
         </Muted>
         <div style={{ marginTop: 10 }}>
-          {decision.optionKind === "trait"
-            ? decision.options
-                .map((o) => [o, traitLabel(srd, o)] as const)
-                .sort((a, b) => a[1].localeCompare(b[1], "pt-BR"))
-                .map(([o, label]) => (
-                  <Chip
-                    key={o}
-                    selected={chosen.includes(o)}
-                    onClick={() => toggle(o)}
-                    aria-pressed={chosen.includes(o)}
-                  >
-                    {label}
-                  </Chip>
-                ))
-            : decision.options
-                .slice()
-                .sort(
-                  (a, b) =>
-                    (srd.docs[a].level ?? 0) - (srd.docs[b].level ?? 0) ||
-                    srd.docs[a].name.localeCompare(srd.docs[b].name, "pt-BR")
-                )
-                .map((id) => (
-                  <DocChoice
-                    key={id}
-                    srd={srd}
-                    id={id}
-                    selected={chosen.includes(id)}
-                    onSelect={() => toggle(id)}
-                    subtitle={docSubtitle(srd, id)}
-                  />
-                ))}
+          {decision.optionKind === "trait" ? (
+            decision.options
+              .map((o) => [o, traitLabel(srd, o)] as const)
+              .sort((a, b) => a[1].localeCompare(b[1], "pt-BR"))
+              .map(([o, label]) => (
+                <Chip
+                  key={o}
+                  selected={chosen.includes(o)}
+                  onClick={() => toggle(o)}
+                  aria-pressed={chosen.includes(o)}
+                >
+                  {label}
+                </Chip>
+              ))
+          ) : (
+            <OptionGrid
+              srd={srd}
+              ids={decision.options}
+              chosen={chosen}
+              onToggle={toggle}
+            />
+          )}
         </div>
       </section>
     );
@@ -309,7 +300,6 @@ export const DocChoice = ({
         border: `1px solid ${selected ? color.gold : color.rule}`,
         background: selected ? color.goldSoft : color.vellum,
         borderRadius: 10,
-        marginBottom: 8,
       }}
     >
       <div style={{ display: "flex", alignItems: "stretch" }}>
@@ -358,3 +348,127 @@ export const DocChoice = ({
 };
 
 export { Details };
+
+/** Opções que são documentos do SRD, em grade, com busca e filtro de círculo quando a lista é longa. */
+export const OptionGrid = ({
+  srd,
+  ids,
+  chosen,
+  onToggle,
+}: {
+  srd: Srd;
+  ids: string[];
+  chosen: string[];
+  onToggle: (id: string) => void;
+}) => {
+  const [query, setQuery] = React.useState("");
+  const [level, setLevel] = React.useState<number | null>(null);
+  const spells =
+    ids.length > 0 && ids.every((id) => srd.docs[id]?.type === "spell");
+  const levels = spells
+    ? [...new Set(ids.map((id) => srd.docs[id].level ?? 0))].sort(
+        (a, b) => a - b
+      )
+    : [];
+  const q = query.trim().toLowerCase();
+  const shown = ids
+    .filter((id) => srd.docs[id])
+    .filter((id) => level === null || srd.docs[id].level === level)
+    .filter(
+      (id) =>
+        !q ||
+        `${srd.docs[id].name} ${srd.docs[id].nameEn ?? ""}`
+          .toLowerCase()
+          .includes(q)
+    )
+    .sort(
+      (a, b) =>
+        (srd.docs[a].level ?? 0) - (srd.docs[b].level ?? 0) ||
+        srd.docs[a].name.localeCompare(srd.docs[b].name, "pt-BR")
+    );
+  return (
+    <>
+      {ids.length > 10 ? (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            alignItems: "center",
+            margin: "8px 0 12px",
+          }}
+        >
+          <input
+            type="search"
+            placeholder="Buscar pelo nome"
+            aria-label="Buscar opção pelo nome"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            style={{
+              font: "inherit",
+              flex: "1 1 220px",
+              minHeight: 42,
+              padding: "8px 12px",
+              borderRadius: 10,
+              border: `1px solid ${color.rule}`,
+              background: color.vellum,
+              color: color.ink,
+            }}
+          />
+          {levels.length > 1 ? (
+            <span style={{ display: "flex", flexWrap: "wrap" }}>
+              <Chip
+                selected={level === null}
+                onClick={() => setLevel(null)}
+                style={{ marginBottom: 0 }}
+              >
+                Todos
+              </Chip>
+              {levels.map((l) => (
+                <Chip
+                  key={l}
+                  selected={level === l}
+                  onClick={() => setLevel(l)}
+                  style={{ marginBottom: 0 }}
+                >
+                  {l === 0 ? "Truques" : `${l}º`}
+                </Chip>
+              ))}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {chosen.length && ids.length > 10 ? (
+        <p style={{ margin: "0 0 10px", color: color.inkSoft, fontSize: 15 }}>
+          Escolhidas:{" "}
+          <span style={{ color: color.gold }}>
+            {chosen
+              .map((id) => srd.docs[id]?.name)
+              .filter(Boolean)
+              .join(", ")}
+          </span>
+        </p>
+      ) : null}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns:
+            "repeat(auto-fill, minmax(min(100%, 300px), 1fr))",
+          gap: 8,
+        }}
+      >
+        {shown.map((id) => (
+          <DocChoice
+            key={id}
+            srd={srd}
+            id={id}
+            selected={chosen.includes(id)}
+            onSelect={() => onToggle(id)}
+            subtitle={docSubtitle(srd, id)}
+          />
+        ))}
+      </div>
+      {!shown.length ? <Muted>Nada com esse nome.</Muted> : null}
+    </>
+  );
+};

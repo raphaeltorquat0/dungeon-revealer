@@ -2,6 +2,7 @@ import * as React from "react";
 import styled from "@emotion/styled/macro";
 import { css, Global } from "@emotion/react";
 import { buildUrl } from "../public-url";
+import { ICONS } from "./icons";
 
 // Ficha iluminada à luz de vela: tinta índigo-noite, velino, ouro velho só no que é seu e no foco.
 export const color = {
@@ -32,9 +33,25 @@ export const GlobalStyle = () => (
       html,
       body,
       #root {
-        background: ${color.night};
         color: ${color.ink};
         min-height: 100%;
+      }
+      body {
+        /* luz de vela vinda de cima, cantos escuros e grão de papel bem leve */
+        background: radial-gradient(
+              ellipse 80% 50% at 50% -10%,
+              rgba(201, 164, 76, 0.13),
+              transparent 70%
+            )
+            fixed,
+          radial-gradient(
+              ellipse at 50% 120%,
+              rgba(0, 0, 0, 0.55),
+              transparent 60%
+            )
+            fixed,
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.9 0 0 0 0 0.85 0 0 0 0 0.75 0 0 0 .035 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+          ${color.night};
       }
       body {
         font-family: ${serif};
@@ -58,8 +75,8 @@ export const GlobalStyle = () => (
   />
 );
 
-export const Page = styled.main`
-  max-width: 720px;
+export const Page = styled.main<{ wide?: boolean }>`
+  max-width: ${(p) => (p.wide ? "1240px" : "720px")};
   margin: 0 auto;
   padding: 20px 18px calc(96px + env(safe-area-inset-bottom));
 `;
@@ -324,4 +341,127 @@ export const Details = styled.details`
 
 export const Muted = styled.span`
   color: ${color.inkSoft};
+`;
+
+/** Ícone do game-icons.net (CC BY 3.0) colorido pelo texto. */
+export const Glyph = ({
+  name,
+  size = 40,
+  title,
+}: {
+  name: string;
+  size?: number;
+  title?: string;
+}) => {
+  const d = ICONS[name];
+  if (!d) return null;
+  return (
+    <svg
+      viewBox="0 0 512 512"
+      width={size}
+      height={size}
+      aria-hidden={!title}
+      role={title ? "img" : undefined}
+      style={{ display: "block", flex: "none" }}
+    >
+      {title ? <title>{title}</title> : null}
+      <path d={d} fill="currentColor" />
+    </svg>
+  );
+};
+
+/** Medalhão: o ícone sobre um disco escuro com aro de ouro. */
+export const Medallion = ({
+  name,
+  size = 64,
+  lit,
+}: {
+  name: string;
+  size?: number;
+  lit?: boolean;
+}) => (
+  <span
+    style={{
+      width: size,
+      height: size,
+      borderRadius: size,
+      flex: "none",
+      display: "grid",
+      placeItems: "center",
+      color: lit ? color.gold : "#B9A77A",
+      background: `radial-gradient(circle at 50% 35%, ${color.vellumHi}, ${color.night})`,
+      border: `1px solid ${lit ? color.gold : color.rule}`,
+      boxShadow: lit
+        ? "0 0 22px rgba(201,164,76,.35), inset 0 0 12px rgba(201,164,76,.15)"
+        : "inset 0 0 10px rgba(0,0,0,.6)",
+      transition: "box-shadow .25s, border-color .25s, color .25s",
+    }}
+  >
+    <Glyph name={name} size={Math.round(size * 0.58)} />
+  </span>
+);
+
+/** Filete de ouro com um losango no meio, para abrir seções. */
+export const Ornament = () => (
+  <div
+    aria-hidden
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      margin: "6px 0 18px",
+      color: color.gold,
+    }}
+  >
+    <span
+      style={{
+        flex: 1,
+        height: 1,
+        background: `linear-gradient(90deg, transparent, ${color.gold} 60%)`,
+        opacity: 0.5,
+      }}
+    />
+    <span
+      style={{
+        width: 7,
+        height: 7,
+        transform: "rotate(45deg)",
+        border: `1px solid ${color.gold}`,
+      }}
+    />
+    <span
+      style={{
+        flex: 1,
+        height: 1,
+        background: `linear-gradient(270deg, transparent, ${color.gold} 60%)`,
+        opacity: 0.5,
+      }}
+    />
+  </div>
+);
+
+export const useWide = (min = 980) => {
+  const query = `(min-width: ${min}px)`;
+  const [wide, setWide] = React.useState(
+    () => window.matchMedia(query).matches
+  );
+  React.useEffect(() => {
+    const m = window.matchMedia(query);
+    const on = () => setWide(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, [query]);
+  return wide;
+};
+
+export const Badge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid ${color.rule};
+  color: ${color.inkSoft};
+  line-height: 1.35;
 `;

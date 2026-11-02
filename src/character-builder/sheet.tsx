@@ -28,7 +28,7 @@ import {
   shortRest,
   totalLevel,
 } from "./rules";
-import { DecisionEditor, DocChoice } from "./decision";
+import { DecisionEditor, DocChoice, OptionGrid } from "./decision";
 import {
   BottomBar,
   Button,
@@ -45,6 +45,7 @@ import {
   Muted,
   Page,
   TextArea,
+  useWide,
 } from "./theme";
 
 const TABS = [
@@ -151,11 +152,17 @@ export const CharacterSheet = ({
 }) => {
   const [tab, setTab] = React.useState<Tab>("resumo");
   const [levelingUp, setLevelingUp] = React.useState(false);
+  const wide = useWide(1000);
   const s = React.useMemo(() => computeSheet(srd, c), [srd, c]);
   const hp = Math.min(c.state.hp ?? s.maxHp, s.maxHp);
   const setState = (patch: Partial<Character["state"]>) =>
     onChange({ ...c, state: { ...c.state, ...patch } });
   const pending = decisions(srd, c).filter((d) => !isDecisionDone(d));
+  // limites de magia aparecem na aba Magias, não como recurso
+  const resources = s.scales.filter(
+    (sc) =>
+      !/\.(max-prepared|cantrips-known|invocations-known)$/.test(sc.identifier)
+  );
 
   if (levelingUp)
     return (
@@ -167,8 +174,110 @@ export const CharacterSheet = ({
       />
     );
 
+  const tabNav = (top: boolean) => {
+    const buttons = TABS.filter(
+      ([id]) =>
+        id !== "magias" || s.spellcasting.length || grantedSpells(srd, c).length
+    ).map(([id, label]) => (
+      <button
+        key={id}
+        onClick={() => {
+          setTab(id);
+          window.scrollTo({ top: 0 });
+        }}
+        aria-current={tab === id ? "page" : undefined}
+        style={{
+          font: "inherit",
+          fontSize: top ? 17 : 14,
+          minHeight: 48,
+          padding: top ? "10px 18px" : 0,
+          background: "transparent",
+          border: 0,
+          borderTop: top
+            ? 0
+            : `2px solid ${tab === id ? color.gold : "transparent"}`,
+          borderBottom: top
+            ? `2px solid ${tab === id ? color.gold : "transparent"}`
+            : 0,
+          color: tab === id ? color.ink : color.inkSoft,
+          cursor: "pointer",
+        }}
+      >
+        {label}
+      </button>
+    ));
+    return top ? (
+      <nav
+        aria-label="Seções da ficha"
+        style={{
+          display: "flex",
+          gap: 4,
+          borderBottom: `1px solid ${color.rule}`,
+          marginBottom: 8,
+          position: "sticky",
+          top: 0,
+          background: "rgba(23, 21, 31, 0.92)",
+          backdropFilter: "blur(8px)",
+          zIndex: 5,
+        }}
+      >
+        {buttons}
+      </nav>
+    ) : (
+      <BottomBar
+        aria-label="Seções da ficha"
+        style={{
+          gap: 2,
+          padding: "6px 4px calc(6px + env(safe-area-inset-bottom))",
+        }}
+      >
+        {buttons}
+      </BottomBar>
+    );
+  };
+
+  const abilitiesGrid = (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(3, 1fr)",
+        gap: 8,
+        marginTop: 18,
+      }}
+    >
+      {ABILITIES.map((ab) => (
+        <div
+          key={ab}
+          style={{
+            border: `1px solid ${color.rule}`,
+            borderRadius: 12,
+            padding: "8px 6px",
+            textAlign: "center",
+            background: color.vellum,
+          }}
+        >
+          <div style={{ fontSize: 13, color: color.inkSoft }}>
+            {ABILITY_LABEL[ab]}
+          </div>
+          <div style={{ fontSize: 30, fontWeight: 600, lineHeight: 1.1 }}>
+            {signed(s.modifiers[ab])}
+          </div>
+          <div style={{ fontSize: 14 }}>{s.scores[ab]}</div>
+          <div
+            style={{
+              fontSize: 13,
+              color: s.saves[ab].proficient ? color.gold : color.inkSoft,
+            }}
+          >
+            resistência {signed(s.saves[ab].bonus)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
-    <Page>
+    <Page wide={wide}>
       <div
         style={{
           display: "flex",
@@ -188,459 +297,416 @@ export const CharacterSheet = ({
           Subir de nível
         </Button>
       </div>
-      <IlluminatedName name={c.name}>
-        <Muted>
-          {classLine(srd, c)}
-          {c.player ? `. Jogador: ${c.player}` : ""}
-        </Muted>
-      </IlluminatedName>
-
-      {pending.length ? (
-        <button
-          onClick={() => setLevelingUp(true)}
-          style={{
-            font: "inherit",
-            marginTop: 14,
-            width: "100%",
-            textAlign: "left",
-            padding: "10px 14px",
-            borderRadius: 10,
-            border: `1px solid ${color.gold}`,
-            background: color.goldSoft,
-            color: color.ink,
-            cursor: "pointer",
-          }}
-        >
-          {pending.length === 1
-            ? "Falta 1 escolha"
-            : `Faltam ${pending.length} escolhas`}{" "}
-          nesta ficha. Toque para resolver.
-        </button>
-      ) : null}
-
       <div
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 8,
-          margin: "20px 0 8px",
-          flexWrap: "wrap",
+          display: wide ? "grid" : "block",
+          gridTemplateColumns: "400px minmax(0, 1fr)",
+          gap: 40,
+          alignItems: "start",
         }}
       >
-        <Stat label="CA" value={s.ac} />
-        <Stat label="Iniciativa" value={signed(s.initiative)} />
-        <Stat label="Deslocamento" value={feetToMeters(s.speed)} />
-        <Stat label="Proficiência" value={signed(s.proficiencyBonus)} />
-      </div>
+        <div style={wide ? { position: "sticky", top: 20 } : undefined}>
+          <IlluminatedName name={c.name}>
+            <Muted>
+              {classLine(srd, c)}
+              {c.player ? `. Jogador: ${c.player}` : ""}
+            </Muted>
+          </IlluminatedName>
 
-      <HitPoints
-        srd={srd}
-        character={c}
-        max={s.maxHp}
-        hp={hp}
-        setState={setState}
-      />
+          {pending.length ? (
+            <button
+              onClick={() => setLevelingUp(true)}
+              style={{
+                font: "inherit",
+                marginTop: 14,
+                width: "100%",
+                textAlign: "left",
+                padding: "10px 14px",
+                borderRadius: 10,
+                border: `1px solid ${color.gold}`,
+                background: color.goldSoft,
+                color: color.ink,
+                cursor: "pointer",
+              }}
+            >
+              {pending.length === 1
+                ? "Falta 1 escolha"
+                : `Faltam ${pending.length} escolhas`}{" "}
+              nesta ficha. Toque para resolver.
+            </button>
+          ) : null}
 
-      {tab === "resumo" ? (
-        <>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 8,
-              marginTop: 18,
-            }}
-          >
-            {ABILITIES.map((ab) => (
-              <div
-                key={ab}
-                style={{
-                  border: `1px solid ${color.rule}`,
-                  borderRadius: 12,
-                  padding: "8px 6px",
-                  textAlign: "center",
-                  background: color.vellum,
-                }}
-              >
-                <div style={{ fontSize: 13, color: color.inkSoft }}>
-                  {ABILITY_LABEL[ab]}
-                </div>
-                <div style={{ fontSize: 30, fontWeight: 600, lineHeight: 1.1 }}>
-                  {signed(s.modifiers[ab])}
-                </div>
-                <div style={{ fontSize: 14 }}>{s.scores[ab]}</div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: s.saves[ab].proficient ? color.gold : color.inkSoft,
-                  }}
-                >
-                  resistência {signed(s.saves[ab].bonus)}
-                </div>
-              </div>
-            ))}
-          </div>
-          <H2>Perícias</H2>
-          <div>
-            {Object.entries(SKILLS)
-              .sort((a, b) => a[1].label.localeCompare(b[1].label, "pt-BR"))
-              .map(([key, info]) => {
-                const sk = s.skills[key];
-                return (
-                  <div
-                    key={key}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      padding: "7px 0",
-                      borderBottom: `1px solid ${color.rule}`,
-                    }}
-                  >
-                    <span
-                      style={{
-                        color: sk.proficient ? color.ink : color.inkSoft,
-                      }}
-                    >
-                      {sk.expertise ? "◆ " : sk.proficient ? "◇ " : "   "}
-                      {info.label}{" "}
-                      <Muted style={{ fontSize: 13 }}>
-                        {ABILITY_SHORT[info.ability]}
-                      </Muted>
-                    </span>
-                    <span
-                      style={{ color: sk.proficient ? color.gold : color.ink }}
-                    >
-                      {signed(sk.bonus)}
-                    </span>
-                  </div>
-                );
-              })}
-          </div>
-          <p style={{ color: color.inkSoft }}>
-            ◇ proficiente, ◆ especialização. Percepção passiva{" "}
-            {s.passivePerception}
-            {s.darkvision
-              ? `. Visão no escuro ${feetToMeters(s.darkvision)}`
-              : ""}
-            .
-          </p>
-          <H2>Condições</H2>
-          <div>
-            {Object.entries(CONDITIONS).map(([key, label]) => {
-              const on = c.state.conditions.includes(key);
-              return (
-                <Chip
-                  key={key}
-                  selected={on}
-                  onClick={() =>
-                    setState({
-                      conditions: on
-                        ? c.state.conditions.filter((x) => x !== key)
-                        : [...c.state.conditions, key],
-                    })
-                  }
-                >
-                  {label}
-                </Chip>
-              );
-            })}
-          </div>
           <div
             style={{
               display: "flex",
-              gap: 16,
-              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+              margin: "20px 0 8px",
               flexWrap: "wrap",
-              marginTop: 8,
             }}
           >
-            <Chip
-              selected={c.state.inspiration}
-              onClick={() => setState({ inspiration: !c.state.inspiration })}
-            >
-              Inspiração Heroica
-            </Chip>
-            <span>
-              Exaustão{" "}
-              <Pips
-                total={6}
-                spent={6 - c.state.exhaustion}
-                label="Exaustão"
-                onChange={(spent) => setState({ exhaustion: 6 - spent })}
-              />
-            </span>
+            <Stat label="CA" value={s.ac} />
+            <Stat label="Iniciativa" value={signed(s.initiative)} />
+            <Stat label="Deslocamento" value={feetToMeters(s.speed)} />
+            <Stat label="Proficiência" value={signed(s.proficiencyBonus)} />
           </div>
-          <H2>Proficiências</H2>
-          <Lead style={{ color: color.ink }}>
-            {[...s.traits]
-              .filter((t) => /^(armor|weapon|tool|languages|dr):/.test(t))
-              .map((t) => traitLabel(srd, t))
-              .join(", ") || "Nenhuma"}
-          </Lead>
-        </>
-      ) : null}
 
-      {tab === "combate" ? (
-        <>
-          <H2>Ataques</H2>
-          {s.attacks.map((a, i) => (
-            <div
-              key={i}
-              style={{
-                padding: "10px 0",
-                borderBottom: `1px solid ${color.rule}`,
-              }}
-            >
+          <HitPoints
+            srd={srd}
+            character={c}
+            max={s.maxHp}
+            hp={hp}
+            setState={setState}
+          />
+
+          {wide ? abilitiesGrid : null}
+        </div>
+        <div>
+          {wide ? tabNav(true) : null}
+          {tab === "resumo" ? (
+            <>
+              {wide ? null : abilitiesGrid}
+              <H2>Perícias</H2>
+              <div>
+                {Object.entries(SKILLS)
+                  .sort((a, b) => a[1].label.localeCompare(b[1].label, "pt-BR"))
+                  .map(([key, info]) => {
+                    const sk = s.skills[key];
+                    return (
+                      <div
+                        key={key}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          padding: "7px 0",
+                          borderBottom: `1px solid ${color.rule}`,
+                        }}
+                      >
+                        <span
+                          style={{
+                            color: sk.proficient ? color.ink : color.inkSoft,
+                          }}
+                        >
+                          {sk.expertise ? "◆ " : sk.proficient ? "◇ " : "   "}
+                          {info.label}{" "}
+                          <Muted style={{ fontSize: 13 }}>
+                            {ABILITY_SHORT[info.ability]}
+                          </Muted>
+                        </span>
+                        <span
+                          style={{
+                            color: sk.proficient ? color.gold : color.ink,
+                          }}
+                        >
+                          {signed(sk.bonus)}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+              <p style={{ color: color.inkSoft }}>
+                ◇ proficiente, ◆ especialização. Percepção passiva{" "}
+                {s.passivePerception}
+                {s.darkvision
+                  ? `. Visão no escuro ${feetToMeters(s.darkvision)}`
+                  : ""}
+                .
+              </p>
+              <H2>Condições</H2>
+              <div>
+                {Object.entries(CONDITIONS).map(([key, label]) => {
+                  const on = c.state.conditions.includes(key);
+                  return (
+                    <Chip
+                      key={key}
+                      selected={on}
+                      onClick={() =>
+                        setState({
+                          conditions: on
+                            ? c.state.conditions.filter((x) => x !== key)
+                            : [...c.state.conditions, key],
+                        })
+                      }
+                    >
+                      {label}
+                    </Chip>
+                  );
+                })}
+              </div>
               <div
                 style={{
                   display: "flex",
-                  justifyContent: "space-between",
-                  gap: 8,
+                  gap: 16,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  marginTop: 8,
                 }}
               >
-                <span style={{ fontSize: 18 }}>{a.name}</span>
+                <Chip
+                  selected={c.state.inspiration}
+                  onClick={() =>
+                    setState({ inspiration: !c.state.inspiration })
+                  }
+                >
+                  Inspiração Heroica
+                </Chip>
                 <span>
-                  <span style={{ color: color.gold }}>{signed(a.toHit)}</span>{" "}
-                  <Muted>para acertar</Muted>
+                  Exaustão{" "}
+                  <Pips
+                    total={6}
+                    spent={6 - c.state.exhaustion}
+                    label="Exaustão"
+                    onChange={(spent) => setState({ exhaustion: 6 - spent })}
+                  />
                 </span>
               </div>
-              <Muted style={{ fontSize: 14 }}>
-                {a.damage} {DAMAGE_LABEL[a.damageType]?.toLowerCase() ?? ""}
-                {a.range
-                  ? `, distância ${a.range
-                      .split("/")
-                      .map((v) => feetToMeters(Number(v)))
-                      .join("/")}`
-                  : ""}
-                {a.properties.length
-                  ? `. ${a.properties
-                      .map((p) => WEAPON_PROPERTY_LABEL[p] ?? p)
-                      .join(", ")}`
-                  : ""}
-                {a.mastery
-                  ? `. Maestria: ${MASTERY_LABEL[a.mastery] ?? a.mastery}`
-                  : ""}
-              </Muted>
-            </div>
-          ))}
-          <Muted style={{ fontSize: 14, display: "block", marginTop: 8 }}>
-            Armas aparecem aqui quando estão equipadas na aba Itens.
-          </Muted>
-          {s.scales.length ? (
+              <H2>Proficiências</H2>
+              <Lead style={{ color: color.ink }}>
+                {[...s.traits]
+                  .filter((t) => /^(armor|weapon|tool|languages|dr):/.test(t))
+                  .map((t) => traitLabel(srd, t))
+                  .join(", ") || "Nenhuma"}
+              </Lead>
+            </>
+          ) : null}
+
+          {tab === "combate" ? (
             <>
-              <H2>Recursos da classe</H2>
-              {s.scales.map((sc) => {
-                const key = sc.identifier;
-                const trackable =
-                  typeof sc.value === "number" &&
-                  (sc.type === "usage" ||
-                    /rages|points|focus|uses|channel/i.test(sc.title + key));
-                return (
+              <H2>Ataques</H2>
+              {s.attacks.map((a, i) => (
+                <div
+                  key={i}
+                  style={{
+                    padding: "10px 0",
+                    borderBottom: `1px solid ${color.rule}`,
+                  }}
+                >
                   <div
-                    key={key}
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: 10,
-                      padding: "8px 0",
-                      borderBottom: `1px solid ${color.rule}`,
+                      gap: 8,
                     }}
                   >
-                    <span>{sc.title}</span>
-                    {trackable ? (
-                      <Pips
-                        total={Number(sc.value)}
-                        spent={c.state.uses[key] ?? 0}
-                        label={sc.title}
-                        onChange={(spent) =>
-                          setState({ uses: { ...c.state.uses, [key]: spent } })
-                        }
-                      />
-                    ) : (
+                    <span style={{ fontSize: 18 }}>{a.name}</span>
+                    <span>
                       <span style={{ color: color.gold }}>
-                        {sc.type === "distance"
-                          ? `+${feetToMeters(Number(sc.value))}`
-                          : String(sc.value)}
-                      </span>
-                    )}
+                        {signed(a.toHit)}
+                      </span>{" "}
+                      <Muted>para acertar</Muted>
+                    </span>
                   </div>
-                );
-              })}
+                  <Muted style={{ fontSize: 14 }}>
+                    {a.damage} {DAMAGE_LABEL[a.damageType]?.toLowerCase() ?? ""}
+                    {a.range
+                      ? `, distância ${a.range
+                          .split("/")
+                          .map((v) => feetToMeters(Number(v)))
+                          .join("/")}`
+                      : ""}
+                    {a.properties.length
+                      ? `. ${a.properties
+                          .map((p) => WEAPON_PROPERTY_LABEL[p] ?? p)
+                          .join(", ")}`
+                      : ""}
+                    {a.mastery
+                      ? `. Maestria: ${MASTERY_LABEL[a.mastery] ?? a.mastery}`
+                      : ""}
+                  </Muted>
+                </div>
+              ))}
+              <Muted style={{ fontSize: 14, display: "block", marginTop: 8 }}>
+                Armas aparecem aqui quando estão equipadas na aba Itens.
+              </Muted>
+              {resources.length ? (
+                <>
+                  <H2>Recursos da classe</H2>
+                  {resources.map((sc) => {
+                    const key = sc.identifier;
+                    const trackable =
+                      typeof sc.value === "number" &&
+                      (sc.type === "usage" ||
+                        /rages|points|focus|uses|channel/i.test(
+                          sc.title + key
+                        ));
+                    return (
+                      <div
+                        key={key}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 10,
+                          padding: "8px 0",
+                          borderBottom: `1px solid ${color.rule}`,
+                        }}
+                      >
+                        <span>{sc.title}</span>
+                        {trackable ? (
+                          <Pips
+                            total={Number(sc.value)}
+                            spent={c.state.uses[key] ?? 0}
+                            label={sc.title}
+                            onChange={(spent) =>
+                              setState({
+                                uses: { ...c.state.uses, [key]: spent },
+                              })
+                            }
+                          />
+                        ) : (
+                          <span style={{ color: color.gold }}>
+                            {sc.type === "distance"
+                              ? `+${feetToMeters(Number(sc.value))}`
+                              : String(sc.value)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
+              ) : null}
+              <H2>Dados de Vida</H2>
+              {s.hitDice.map((h) => (
+                <div
+                  key={h.classId}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "6px 0",
+                  }}
+                >
+                  <span>
+                    {srd.docs[h.classId]?.name} ({h.die})
+                  </span>
+                  <Pips
+                    total={h.count}
+                    spent={c.state.hitDiceSpent[h.classId] ?? 0}
+                    label={`Dados de Vida ${h.die}`}
+                    onChange={(spent) =>
+                      setState({
+                        hitDiceSpent: {
+                          ...c.state.hitDiceSpent,
+                          [h.classId]: spent,
+                        },
+                      })
+                    }
+                  />
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+                <Button
+                  style={{ flex: 1 }}
+                  onClick={() => onChange(shortRest(c))}
+                >
+                  Descanso curto
+                </Button>
+                <Button
+                  style={{ flex: 1 }}
+                  onClick={() => onChange(longRest(srd, c))}
+                >
+                  Descanso longo
+                </Button>
+              </div>
+              <Muted style={{ fontSize: 14, display: "block", marginTop: 8 }}>
+                O descanso longo recupera PV, Dados de Vida, espaços de magia e
+                recursos. O curto recupera os espaços de pacto; gaste Dados de
+                Vida acima e cure na barra de PV.
+              </Muted>
             </>
           ) : null}
-          <H2>Dados de Vida</H2>
-          {s.hitDice.map((h) => (
-            <div
-              key={h.classId}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "6px 0",
-              }}
-            >
-              <span>
-                {srd.docs[h.classId]?.name} ({h.die})
-              </span>
-              <Pips
-                total={h.count}
-                spent={c.state.hitDiceSpent[h.classId] ?? 0}
-                label={`Dados de Vida ${h.die}`}
-                onChange={(spent) =>
-                  setState({
-                    hitDiceSpent: {
-                      ...c.state.hitDiceSpent,
-                      [h.classId]: spent,
-                    },
+
+          {tab === "magias" ? (
+            <SpellsTab srd={srd} character={c} sheet={s} onChange={onChange} />
+          ) : null}
+
+          {tab === "tracos" ? (
+            <>
+              <H2>Características e traços</H2>
+              {s.features.map(({ doc, source }, i) => (
+                <Details key={`${doc.id}-${i}`}>
+                  <summary>
+                    <span>
+                      {doc.name}{" "}
+                      <Muted style={{ fontSize: 14 }}>{source.name}</Muted>
+                    </span>
+                  </summary>
+                  <Html html={doc.description} />
+                </Details>
+              ))}
+            </>
+          ) : null}
+
+          {tab === "itens" ? (
+            <ItemsTab srd={srd} character={c} onChange={onChange} />
+          ) : null}
+
+          {tab === "notas" ? (
+            <>
+              <Label htmlFor="notas">Anotações da campanha</Label>
+              <TextArea
+                id="notas"
+                style={{ minHeight: 220 }}
+                value={c.details.notes ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...c,
+                    details: { ...c.details, notes: e.target.value },
                   })
                 }
               />
-            </div>
-          ))}
-          <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-            <Button style={{ flex: 1 }} onClick={() => onChange(shortRest(c))}>
-              Descanso curto
-            </Button>
-            <Button
-              style={{ flex: 1 }}
-              onClick={() => onChange(longRest(srd, c))}
-            >
-              Descanso longo
-            </Button>
-          </div>
-          <Muted style={{ fontSize: 14, display: "block", marginTop: 8 }}>
-            O descanso longo recupera PV, Dados de Vida, espaços de magia e
-            recursos. O curto recupera os espaços de pacto; gaste Dados de Vida
-            acima e cure na barra de PV.
-          </Muted>
-        </>
-      ) : null}
-
-      {tab === "magias" ? (
-        <SpellsTab srd={srd} character={c} sheet={s} onChange={onChange} />
-      ) : null}
-
-      {tab === "tracos" ? (
-        <>
-          <H2>Características e traços</H2>
-          {s.features.map(({ doc, source }, i) => (
-            <Details key={`${doc.id}-${i}`}>
-              <summary>
-                <span>
-                  {doc.name}{" "}
-                  <Muted style={{ fontSize: 14 }}>{source.name}</Muted>
-                </span>
-              </summary>
-              <Html html={doc.description} />
-            </Details>
-          ))}
-        </>
-      ) : null}
-
-      {tab === "itens" ? (
-        <ItemsTab srd={srd} character={c} onChange={onChange} />
-      ) : null}
-
-      {tab === "notas" ? (
-        <>
-          <Label htmlFor="notas">Anotações da campanha</Label>
-          <TextArea
-            id="notas"
-            style={{ minHeight: 220 }}
-            value={c.details.notes ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...c,
-                details: { ...c.details, notes: e.target.value },
-              })
-            }
-          />
-          <Label htmlFor="aparencia2">Aparência</Label>
-          <TextArea
-            id="aparencia2"
-            value={c.details.appearance ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...c,
-                details: { ...c.details, appearance: e.target.value },
-              })
-            }
-          />
-          <Label htmlFor="historia2">História</Label>
-          <TextArea
-            id="historia2"
-            value={c.details.backstory ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...c,
-                details: { ...c.details, backstory: e.target.value },
-              })
-            }
-          />
-          <div
-            style={{
-              display: "flex",
-              gap: 10,
-              marginTop: 24,
-              flexWrap: "wrap",
-            }}
-          >
-            <Button onClick={onEditCreation}>Rever criação</Button>
-            <Button
-              tone="danger"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    `Excluir a ficha de ${
-                      c.name || "personagem sem nome"
-                    }? Não dá para desfazer.`
-                  )
-                )
-                  onDelete();
-              }}
-            >
-              Excluir ficha
-            </Button>
-          </div>
-        </>
-      ) : null}
-
-      <BottomBar
-        aria-label="Seções da ficha"
-        style={{
-          gap: 2,
-          padding: "6px 4px calc(6px + env(safe-area-inset-bottom))",
-        }}
-      >
-        {TABS.filter(
-          ([id]) =>
-            id !== "magias" ||
-            s.spellcasting.length ||
-            grantedSpells(srd, c).length
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            onClick={() => {
-              setTab(id);
-              window.scrollTo({ top: 0 });
-            }}
-            aria-current={tab === id ? "page" : undefined}
-            style={{
-              font: "inherit",
-              fontSize: 14,
-              minHeight: 48,
-              background: "transparent",
-              border: 0,
-              borderTop: `2px solid ${tab === id ? color.gold : "transparent"}`,
-              color: tab === id ? color.ink : color.inkSoft,
-              cursor: "pointer",
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </BottomBar>
+              <Label htmlFor="aparencia2">Aparência</Label>
+              <TextArea
+                id="aparencia2"
+                value={c.details.appearance ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...c,
+                    details: { ...c.details, appearance: e.target.value },
+                  })
+                }
+              />
+              <Label htmlFor="historia2">História</Label>
+              <TextArea
+                id="historia2"
+                value={c.details.backstory ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...c,
+                    details: { ...c.details, backstory: e.target.value },
+                  })
+                }
+              />
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  marginTop: 24,
+                  flexWrap: "wrap",
+                }}
+              >
+                <Button onClick={onEditCreation}>Rever criação</Button>
+                <Button
+                  tone="danger"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Excluir a ficha de ${
+                          c.name || "personagem sem nome"
+                        }? Não dá para desfazer.`
+                      )
+                    )
+                      onDelete();
+                  }}
+                >
+                  Excluir ficha
+                </Button>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </div>
+      {wide ? null : tabNav(false)}
     </Page>
   );
 };
@@ -995,30 +1061,22 @@ const SpellPicker = ({
                 Truques: {chosenC.length} de {l.cantrips}
               </Lead>
             ) : null}
-            {cantripIds.map((id) => (
-              <DocChoice
-                key={id}
-                srd={srd}
-                id={id}
-                subtitle="Truque"
-                selected={chosenC.includes(id)}
-                onSelect={() => toggle("known", id, l.cantrips, chosenC)}
-              />
-            ))}
+            <OptionGrid
+              srd={srd}
+              ids={cantripIds}
+              chosen={chosenC}
+              onToggle={(id) => toggle("known", id, l.cantrips, chosenC)}
+            />
             <Lead>
               Preparadas: {chosenP.length} de {l.prepared}, até o {l.maxLevel}º
               círculo
             </Lead>
-            {spellIds.map((id) => (
-              <DocChoice
-                key={id}
-                srd={srd}
-                id={id}
-                subtitle={`${srd.docs[id].level}º círculo`}
-                selected={chosenP.includes(id)}
-                onSelect={() => toggle("prepared", id, l.prepared, chosenP)}
-              />
-            ))}
+            <OptionGrid
+              srd={srd}
+              ids={spellIds}
+              chosen={chosenP}
+              onToggle={(id) => toggle("prepared", id, l.prepared, chosenP)}
+            />
           </section>
         );
       })}

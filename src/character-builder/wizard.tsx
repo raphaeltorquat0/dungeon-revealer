@@ -1,11 +1,16 @@
 import * as React from "react";
+import styled from "@emotion/styled/macro";
+import { BACKGROUND_LORE, CLASS_LORE, SPECIES_LORE } from "./lore";
 import {
   ABILITIES,
   ABILITY_LABEL,
   ABILITY_SHORT,
   AbilityKey,
+  feetToMeters,
   Srd,
+  SrdDoc,
   signed,
+  traitLabel,
 } from "./srd";
 import {
   abilityScores,
@@ -20,7 +25,7 @@ import {
   spellLimits,
   STANDARD_ARRAY,
 } from "./rules";
-import { DecisionEditor, DocChoice } from "./decision";
+import { DecisionEditor, DocChoice, OptionGrid } from "./decision";
 import {
   categoryItems,
   describeNode,
@@ -30,19 +35,25 @@ import {
   resolveEquipment,
 } from "./equipment";
 import {
-  BottomBar,
+  Badge,
   Button,
   Chip,
   color,
+  Details,
   display,
   H1,
   H2,
+  Html,
+  IlluminatedName,
   Input,
   Label,
   Lead,
+  Medallion,
   Muted,
+  Ornament,
   Page,
   TextArea,
+  useWide,
 } from "./theme";
 
 type Step = {
@@ -81,10 +92,12 @@ export const Wizard = ({
   onFinish: () => void;
   onExit: () => void;
 }) => {
+  const wide = useWide(980);
   const [stepIndex, setStepIndex] = React.useState(() =>
     character.classes.length ? 1 : 0
   );
   const c = character;
+  const hasClass = c.classes.length > 0;
   const caster = spellLimits(srd, c).length > 0;
 
   const docsOfType = (type: string) =>
@@ -115,66 +128,70 @@ export const Wizard = ({
     });
   };
 
-  const decisionsFor = (root: Root) =>
-    decisions(srd, c)
-      .filter((d) => d.root === root)
-      .map((d) => (
-        <DecisionEditor
-          key={d.key}
-          srd={srd}
-          character={c}
-          decision={d}
-          onChange={onChange}
-        />
-      ));
+  const choicesFor = (root: Root) => {
+    const list = decisions(srd, c).filter((d) => d.root === root);
+    if (!list.length) return null;
+    return (
+      <Panel>
+        <H2 style={{ marginTop: 0 }}>Suas escolhas</H2>
+        {list.map((d) => (
+          <DecisionEditor
+            key={d.key}
+            srd={srd}
+            character={c}
+            decision={d}
+            onChange={onChange}
+          />
+        ))}
+      </Panel>
+    );
+  };
+
+  const selectClass = (id: string) => {
+    if (c.classes[0]?.classId === id) return;
+    // trocar de classe recomeça as escolhas da classe e o equipamento
+    const base = {
+      ...c,
+      classes: [],
+      equipmentChoice: {},
+      inventory: [],
+      spells: { known: [], prepared: [] },
+    };
+    const next = levelUp(srd, base, id, 0);
+    onChange(
+      abilitiesValid(next)
+        ? next
+        : {
+            ...next,
+            abilityMethod: "standard",
+            abilities: suggested(srd.docs[id].primaryAbility?.value ?? []),
+          }
+    );
+  };
 
   const steps: Step[] = [
     {
       id: "classe",
       title: "Classe",
-      done: () => c.classes.length > 0,
+      done: () => hasClass,
       render: () => (
-        <>
-          <Lead>
-            A classe define o papel do personagem no grupo: o que ele faz em
-            combate, que magia usa e como cresce.
-          </Lead>
-          {docsOfType("class").map((cls) => (
-            <DocChoice
-              key={cls.id}
-              srd={srd}
-              id={cls.id}
-              selected={c.classes[0]?.classId === cls.id}
-              subtitle={`Dado de Vida ${cls.hitDie}, atributo principal ${(
-                cls.primaryAbility?.value ?? []
-              )
-                .map((ab) => ABILITY_LABEL[ab])
-                .join(cls.primaryAbility?.all ? " e " : " ou ")}`}
-              onSelect={() => {
-                if (c.classes[0]?.classId === cls.id) return;
-                // trocar de classe recomeça as escolhas da classe e o equipamento
-                const base = {
-                  ...c,
-                  classes: [],
-                  equipmentChoice: {},
-                  inventory: [],
-                  spells: { known: [], prepared: [] },
-                };
-                const next = levelUp(srd, base, cls.id, 0);
-                // começa com o conjunto padrão já distribuído pela prioridade da classe
-                onChange(
-                  abilitiesValid(next)
-                    ? next
-                    : {
-                        ...next,
-                        abilityMethod: "standard",
-                        abilities: suggested(cls.primaryAbility?.value ?? []),
-                      }
-                );
-              }}
-            />
-          ))}
-        </>
+        <Chooser
+          wide={wide}
+          srd={srd}
+          lead="A classe define o que o personagem faz em combate, que magia usa e como cresce."
+          items={docsOfType("class")}
+          selectedId={c.classes[0]?.classId}
+          onSelect={selectClass}
+          icon={(d) => d.identifier ?? ""}
+          tagline={(d) => CLASS_LORE[d.identifier ?? ""]?.tagline}
+          meta={(d) => [
+            `Dado de Vida ${d.hitDie}`,
+            (d.primaryAbility?.value ?? [])
+              .map((ab) => ABILITY_SHORT[ab])
+              .join(d.primaryAbility?.all ? " e " : " ou "),
+            CLASS_LORE[d.identifier ?? ""]?.role,
+          ]}
+        />
       ),
     },
     {
@@ -183,20 +200,18 @@ export const Wizard = ({
       done: () => Boolean(c.backgroundId) && rootDone(srd, c, "background"),
       render: () => (
         <>
-          <Lead>
-            De onde o personagem vem. O antecedente dá aumentos de atributo,
-            perícias, uma ferramenta e um talento de origem.
-          </Lead>
-          {docsOfType("background").map((bg) => (
-            <DocChoice
-              key={bg.id}
-              srd={srd}
-              id={bg.id}
-              selected={c.backgroundId === bg.id}
-              onSelect={() => onChange({ ...c, backgroundId: bg.id })}
-            />
-          ))}
-          {c.backgroundId ? decisionsFor("background") : null}
+          <Chooser
+            wide={wide}
+            srd={srd}
+            lead="De onde o personagem vem. Dá aumentos de atributo, perícias, uma ferramenta e um talento de origem."
+            items={docsOfType("background")}
+            selectedId={c.backgroundId}
+            onSelect={(id) => onChange({ ...c, backgroundId: id })}
+            icon={(d) => d.identifier ?? ""}
+            tagline={(d) => BACKGROUND_LORE[d.identifier ?? ""]}
+            meta={(d) => grantsOf(srd, d)}
+          />
+          {c.backgroundId ? choicesFor("background") : null}
         </>
       ),
     },
@@ -206,76 +221,108 @@ export const Wizard = ({
       done: () => Boolean(c.speciesId) && rootDone(srd, c, "species"),
       render: () => (
         <>
-          <Lead>
-            A espécie define tamanho, deslocamento e traços como visão no escuro
-            ou resistências.
-          </Lead>
-          {docsOfType("race").map((sp) => (
-            <DocChoice
-              key={sp.id}
-              srd={srd}
-              id={sp.id}
-              selected={c.speciesId === sp.id}
-              subtitle={`Deslocamento ${
-                Number(sp.movement?.walk ?? 30) * 0.3
-              } m${
-                sp.senses?.darkvision
-                  ? `, visão no escuro ${sp.senses.darkvision * 0.3} m`
-                  : ""
-              }`}
-              onSelect={() => onChange({ ...c, speciesId: sp.id })}
-            />
-          ))}
-          {c.speciesId ? decisionsFor("species") : null}
+          <Chooser
+            wide={wide}
+            srd={srd}
+            lead="A espécie define tamanho, deslocamento e traços como visão no escuro ou resistências."
+            items={docsOfType("race")}
+            selectedId={c.speciesId}
+            onSelect={(id) => onChange({ ...c, speciesId: id })}
+            icon={(d) => d.identifier ?? ""}
+            tagline={(d) => SPECIES_LORE[d.identifier ?? ""]}
+            meta={(d) => [
+              `Deslocamento ${feetToMeters(Number(d.movement?.walk ?? 30))}`,
+              d.senses?.darkvision
+                ? `Visão no escuro ${feetToMeters(d.senses.darkvision)}`
+                : undefined,
+            ]}
+          />
+          {c.speciesId ? choicesFor("species") : null}
         </>
       ),
     },
     {
       id: "atributos",
       title: "Atributos",
-      done: () => abilitiesValid(c),
+      done: () => hasClass && abilitiesValid(c),
       render: () => <AbilityStep srd={srd} character={c} onChange={onChange} />,
     },
     {
       id: "escolhas",
       title: "Escolhas da classe",
-      done: () => rootDone(srd, c, "class"),
-      render: () => {
-        const list = decisionsFor("class");
-        return list.length ? (
-          <>{list}</>
+      done: () => hasClass && rootDone(srd, c, "class"),
+      render: () =>
+        !hasClass ? (
+          <Lead>Escolha a classe primeiro.</Lead>
         ) : (
-          <Lead>Esta classe não pede outras escolhas no 1º nível.</Lead>
-        );
-      },
+          choicesFor("class") ?? (
+            <Lead>Esta classe não pede outras escolhas no 1º nível.</Lead>
+          )
+        ),
     },
     {
       id: "equipamento",
       title: "Equipamento",
-      done: () => equipmentPending.length === 0,
+      done: () =>
+        hasClass && Boolean(c.backgroundId) && equipmentPending.length === 0,
       render: () => (
         <>
           <Lead>
-            Escolha o equipamento inicial da classe e do antecedente. A
-            alternativa em ouro deixa você comprar o que quiser.
+            Fique com o kit pronto (A) ou leve o valor em ouro (B) e compre o
+            que quiser.
           </Lead>
-          {[
-            ["Da classe", classEquipment],
-            ["Do antecedente", backgroundEquipment],
-          ].map(([label, roots]) => (
-            <section key={label as string}>
-              <H2>{label as string}</H2>
-              {(roots as EquipmentNode[]).map((n) => (
-                <EquipmentNodeEditor
-                  key={n.id}
-                  srd={srd}
-                  node={n}
-                  choice={equipmentChoice}
-                  onChoice={applyEquipment}
-                />
-              ))}
-            </section>
-          ))}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: wide ? "1fr 1fr" : "1fr",
+              gap: 16,
+            }}
+          >
+            {(
+              [
+                [
+                  "Da classe",
+                  classEquipment,
+                  c.classes[0] ? srd.docs[c.classes[0].classId] : undefined,
+                ],
+                [
+                  "Do antecedente",
+                  backgroundEquipment,
+                  c.backgroundId ? srd.docs[c.backgroundId] : undefined,
+                ],
+              ] as const
+            ).map(([label, roots, doc]) => (
+              <Panel key={label}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    marginBottom: 8,
+                  }}
+                >
+                  {doc ? (
+                    <Medallion name={doc.identifier ?? ""} size={44} lit />
+                  ) : null}
+                  <div>
+                    <H2 style={{ margin: 0 }}>{label}</H2>
+                    <Muted style={{ fontSize: 14 }}>
+                      {doc?.name ?? "Escolha antes no passo anterior"}
+                    </Muted>
+                  </div>
+                </div>
+                {roots.map((n) => (
+                  <EquipmentNodeEditor
+                    key={n.id}
+                    srd={srd}
+                    node={n}
+                    choice={equipmentChoice}
+                    onChoice={applyEquipment}
+                  />
+                ))}
+              </Panel>
+            ))}
+          </div>
         </>
       ),
     },
@@ -307,55 +354,65 @@ export const Wizard = ({
       title: "Detalhes",
       done: () => c.name.trim().length > 0,
       render: () => (
-        <>
-          <Label htmlFor="nome">Nome do personagem</Label>
-          <Input
-            id="nome"
-            value={c.name}
-            autoComplete="off"
-            onChange={(e) => onChange({ ...c, name: e.target.value })}
-          />
-          <Label htmlFor="jogador">Jogador</Label>
-          <Input
-            id="jogador"
-            value={c.player ?? ""}
-            onChange={(e) => onChange({ ...c, player: e.target.value })}
-          />
-          <Label htmlFor="alinhamento">Alinhamento</Label>
-          <Input
-            id="alinhamento"
-            value={c.details.alignment ?? ""}
-            placeholder="Ex.: Neutro e Bom"
-            onChange={(e) =>
-              onChange({
-                ...c,
-                details: { ...c.details, alignment: e.target.value },
-              })
-            }
-          />
-          <Label htmlFor="aparencia">Aparência</Label>
-          <TextArea
-            id="aparencia"
-            value={c.details.appearance ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...c,
-                details: { ...c.details, appearance: e.target.value },
-              })
-            }
-          />
-          <Label htmlFor="historia">História</Label>
-          <TextArea
-            id="historia"
-            value={c.details.backstory ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...c,
-                details: { ...c.details, backstory: e.target.value },
-              })
-            }
-          />
-        </>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: wide ? "1fr 1fr" : "1fr",
+            columnGap: 20,
+          }}
+        >
+          <div>
+            <Label htmlFor="nome">Nome do personagem</Label>
+            <Input
+              id="nome"
+              value={c.name}
+              autoComplete="off"
+              onChange={(e) => onChange({ ...c, name: e.target.value })}
+            />
+            <Label htmlFor="jogador">Jogador</Label>
+            <Input
+              id="jogador"
+              value={c.player ?? ""}
+              onChange={(e) => onChange({ ...c, player: e.target.value })}
+            />
+            <Label htmlFor="alinhamento">Alinhamento</Label>
+            <Input
+              id="alinhamento"
+              value={c.details.alignment ?? ""}
+              placeholder="Ex.: Neutro e Bom"
+              onChange={(e) =>
+                onChange({
+                  ...c,
+                  details: { ...c.details, alignment: e.target.value },
+                })
+              }
+            />
+          </div>
+          <div>
+            <Label htmlFor="aparencia">Aparência</Label>
+            <TextArea
+              id="aparencia"
+              value={c.details.appearance ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...c,
+                  details: { ...c.details, appearance: e.target.value },
+                })
+              }
+            />
+            <Label htmlFor="historia">História</Label>
+            <TextArea
+              id="historia"
+              value={c.details.backstory ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...c,
+                  details: { ...c.details, backstory: e.target.value },
+                })
+              }
+            />
+          </div>
+        </div>
       ),
     },
   ];
@@ -367,96 +424,450 @@ export const Wizard = ({
     window.scrollTo({ top: 0 });
   };
 
+  const stepButton = (s: Step, i: number, compact: boolean) => {
+    const current = i === stepIndex;
+    const done = s.done(c);
+    return (
+      <li key={s.id} style={{ flex: "none" }}>
+        <button
+          onClick={() => go(i)}
+          aria-current={current ? "step" : undefined}
+          style={{
+            font: "inherit",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            width: compact ? undefined : "100%",
+            padding: compact ? "6px 12px 6px 6px" : "8px 10px",
+            borderRadius: 30,
+            cursor: "pointer",
+            textAlign: "left",
+            color: current ? color.ink : done ? color.ink : color.inkSoft,
+            background: current ? color.goldSoft : "transparent",
+            border: `1px solid ${current ? color.gold : "transparent"}`,
+          }}
+        >
+          <span
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 28,
+              flex: "none",
+              display: "grid",
+              placeItems: "center",
+              fontSize: 14,
+              fontWeight: 600,
+              border: `1px solid ${done || current ? color.gold : color.rule}`,
+              background: done ? color.gold : "transparent",
+              color: done ? color.night : color.ink,
+            }}
+          >
+            {done ? "✓" : i + 1}
+          </span>
+          <span style={{ fontSize: 16 }}>{s.title}</span>
+        </button>
+      </li>
+    );
+  };
+
+  const nav = (
+    <div style={{ display: "flex", gap: 10, marginTop: 28 }}>
+      <Button
+        disabled={stepIndex === 0}
+        onClick={() => go(stepIndex - 1)}
+        style={{ flex: 1 }}
+      >
+        Anterior
+      </Button>
+      {stepIndex < steps.length - 1 ? (
+        <Button
+          tone="primary"
+          disabled={!step.done(c)}
+          onClick={() => go(stepIndex + 1)}
+          style={{ flex: 2 }}
+        >
+          Próximo: {steps[stepIndex + 1].title}
+        </Button>
+      ) : (
+        <Button
+          tone="primary"
+          style={{ flex: 2 }}
+          disabled={!allDone}
+          onClick={() => {
+            onChange({ ...c, state: { ...c.state, hp: sheet(srd, c).maxHp } });
+            onFinish();
+          }}
+        >
+          Concluir ficha
+        </Button>
+      )}
+    </div>
+  );
+
   return (
-    <Page>
+    <Page wide>
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          marginBottom: 18,
         }}
       >
         <Button tone="quiet" onClick={onExit} style={{ minHeight: 40 }}>
           Voltar às fichas
         </Button>
-        <Muted style={{ fontSize: 14 }}>Salvo automaticamente</Muted>
+        <Muted style={{ fontSize: 14 }}>Tudo é salvo automaticamente</Muted>
       </div>
-      {/* passos numerados: é de fato uma sequência */}
-      <ol
-        aria-label="Passos"
+      <div
         style={{
-          display: "flex",
-          gap: 6,
-          listStyle: "none",
-          padding: 0,
-          margin: "18px 0 6px",
-          overflowX: "auto",
+          display: wide ? "grid" : "block",
+          gridTemplateColumns: "250px minmax(0, 1fr)",
+          gap: 36,
+          alignItems: "start",
         }}
       >
-        {steps.map((s, i) => {
-          const current = i === stepIndex;
-          const done = s.done(c);
-          return (
-            <li key={s.id} style={{ flex: "none" }}>
-              <button
-                onClick={() => go(i)}
-                aria-current={current ? "step" : undefined}
-                title={s.title}
-                style={{
-                  font: "inherit",
-                  width: 36,
-                  height: 36,
-                  borderRadius: 36,
-                  cursor: "pointer",
-                  border: `1px solid ${
-                    current || done ? color.gold : color.rule
-                  }`,
-                  background: done
-                    ? color.gold
-                    : current
-                    ? color.goldSoft
-                    : "transparent",
-                  color: done ? color.night : color.ink,
-                  fontWeight: 600,
-                }}
-              >
-                {i + 1}
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-      <H1>{step.title}</H1>
-      {step.render()}
-      <BottomBar>
-        <Button disabled={stepIndex === 0} onClick={() => go(stepIndex - 1)}>
-          Anterior
-        </Button>
-        {stepIndex < steps.length - 1 ? (
-          <Button
-            tone="primary"
-            disabled={!step.done(c)}
-            onClick={() => go(stepIndex + 1)}
-          >
-            Próximo
-          </Button>
+        {wide ? (
+          <aside style={{ position: "sticky", top: 20 }}>
+            <ol
+              aria-label="Passos"
+              style={{
+                listStyle: "none",
+                padding: 0,
+                margin: 0,
+                display: "grid",
+                gap: 4,
+              }}
+            >
+              {steps.map((s, i) => stepButton(s, i, false))}
+            </ol>
+            <Summary srd={srd} character={c} />
+          </aside>
         ) : (
-          <Button
-            tone="primary"
-            disabled={!allDone}
-            onClick={() => {
-              onChange({
-                ...c,
-                state: { ...c.state, hp: sheet(srd, c).maxHp },
-              });
-              onFinish();
+          <ol
+            aria-label="Passos"
+            style={{
+              display: "flex",
+              gap: 6,
+              listStyle: "none",
+              padding: "0 0 6px",
+              margin: "0 -18px 8px",
+              paddingLeft: 18,
+              overflowX: "auto",
             }}
           >
-            Concluir ficha
-          </Button>
+            {steps.map((s, i) => stepButton(s, i, true))}
+          </ol>
         )}
-      </BottomBar>
+        <div>
+          <Muted style={{ fontSize: 15 }}>
+            Passo {stepIndex + 1} de {steps.length}
+          </Muted>
+          <H1 style={{ fontSize: wide ? 44 : 34 }}>{step.title}</H1>
+          <Ornament />
+          {step.render()}
+          {nav}
+        </div>
+      </div>
     </Page>
+  );
+};
+
+/** Galeria de cartões com detalhes da opção escolhida ao lado (desktop) ou abaixo (celular). */
+const Chooser = ({
+  wide,
+  srd,
+  lead,
+  items,
+  selectedId,
+  onSelect,
+  icon,
+  tagline,
+  meta,
+}: {
+  wide: boolean;
+  srd: Srd;
+  lead: string;
+  items: SrdDoc[];
+  selectedId?: string;
+  onSelect: (id: string) => void;
+  icon: (d: SrdDoc) => string;
+  tagline: (d: SrdDoc) => string | undefined;
+  meta: (d: SrdDoc) => (string | undefined)[];
+}) => {
+  const selected = selectedId ? srd.docs[selectedId] : undefined;
+  const detail = selected ? (
+    <Detail
+      srd={srd}
+      doc={selected}
+      icon={icon(selected)}
+      tagline={tagline(selected)}
+    />
+  ) : null;
+  const showSide = wide && window.innerWidth >= 1240;
+  return (
+    <>
+      <Lead>{lead}</Lead>
+      <div
+        style={{
+          display: showSide ? "grid" : "block",
+          gridTemplateColumns: "minmax(0, 1fr) 360px",
+          gap: 24,
+          alignItems: "start",
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: wide
+              ? "repeat(auto-fill, minmax(200px, 1fr))"
+              : "1fr",
+            gap: 12,
+          }}
+        >
+          {items.map((d) => {
+            const sel = d.id === selectedId;
+            return (
+              <CardButton
+                key={d.id}
+                row={!wide}
+                selected={sel}
+                aria-pressed={sel}
+                onClick={() => onSelect(d.id)}
+              >
+                <Medallion name={icon(d)} size={wide ? 60 : 52} lit={sel} />
+                <span
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                    minWidth: 0,
+                    flex: 1,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: display,
+                      fontSize: wide ? 25 : 23,
+                      lineHeight: 1.1,
+                    }}
+                  >
+                    {d.name}
+                  </span>
+                  {tagline(d) ? (
+                    <span
+                      style={{
+                        color: color.inkSoft,
+                        fontSize: 15,
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {tagline(d)}
+                    </span>
+                  ) : null}
+                  <span
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 6,
+                      marginTop: "auto",
+                    }}
+                  >
+                    {meta(d)
+                      .filter(Boolean)
+                      .map((m) => (
+                        <Badge key={m}>{m}</Badge>
+                      ))}
+                  </span>
+                </span>
+              </CardButton>
+            );
+          })}
+        </div>
+        {showSide ? (
+          <div
+            style={{
+              position: "sticky",
+              top: 20,
+              maxHeight: "calc(100vh - 40px)",
+              overflowY: "auto",
+              borderRadius: 16,
+            }}
+          >
+            {detail}
+          </div>
+        ) : detail ? (
+          <div style={{ marginTop: 20 }}>{detail}</div>
+        ) : null}
+      </div>
+    </>
+  );
+};
+
+const CardButton = styled.button<{ selected?: boolean; row?: boolean }>`
+  font: inherit;
+  color: ${color.ink};
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: ${(p) => (p.row ? "row" : "column")};
+  align-items: ${(p) => (p.row ? "flex-start" : "stretch")};
+  gap: ${(p) => (p.row ? "14px" : "10px")};
+  min-height: ${(p) => (p.row ? "0" : "200px")};
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid ${(p) => (p.selected ? color.gold : color.rule)};
+  background: ${(p) =>
+    p.selected
+      ? `linear-gradient(180deg, rgba(201,164,76,.14), ${color.vellum})`
+      : `linear-gradient(180deg, ${color.vellumHi}, ${color.vellum})`};
+  box-shadow: ${(p) =>
+    p.selected
+      ? "0 0 0 1px rgba(201,164,76,.35), 0 10px 30px rgba(0,0,0,.35)"
+      : "0 6px 18px rgba(0,0,0,.25)"};
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+  &:hover {
+    border-color: ${(p) => (p.selected ? color.gold : "rgba(201,164,76,.5)")};
+    transform: translateY(-2px);
+  }
+`;
+
+const Panel = styled.section`
+  border: 1px solid ${color.rule};
+  border-radius: 16px;
+  padding: 18px;
+  margin-top: 20px;
+  background: linear-gradient(
+    180deg,
+    rgba(44, 40, 56, 0.6),
+    rgba(34, 31, 44, 0.6)
+  );
+`;
+
+/** O que a opção escolhida concede, lido do próprio SRD. */
+const Detail = ({
+  srd,
+  doc,
+  icon,
+  tagline,
+}: {
+  srd: Srd;
+  doc: SrdDoc;
+  icon: string;
+  tagline?: string;
+}) => {
+  const html = doc.description ?? "";
+  // o primeiro quadro do texto da classe é o resumo dos traços principais
+  const table = html.match(/<table[\s\S]*?<\/table>/)?.[0];
+  const features = (doc.advancement ?? [])
+    .filter((a) => a.type === "ItemGrant" && (a.level ?? 0) <= 1)
+    .flatMap((a) => (a.config.items ?? []) as string[])
+    .map((id) => srd.docs[id])
+    .filter(Boolean);
+  return (
+    <Panel style={{ marginTop: 0 }}>
+      <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+        <Medallion name={icon} size={76} lit />
+        <div>
+          <div style={{ fontFamily: display, fontSize: 30, lineHeight: 1.1 }}>
+            {doc.name}
+          </div>
+          {tagline ? <Muted>{tagline}</Muted> : null}
+        </div>
+      </div>
+      {table ? <Html html={table} /> : null}
+      {features.length ? (
+        <>
+          <div
+            style={{ fontFamily: display, fontSize: 20, margin: "14px 0 6px" }}
+          >
+            {doc.type === "class" ? "No 1º nível" : "Traços"}
+          </div>
+          {features.map((f) => (
+            <Details key={f.id}>
+              <summary>{f.name}</summary>
+              <Html html={f.description} />
+            </Details>
+          ))}
+        </>
+      ) : null}
+      <Details>
+        <summary>{table ? "Texto completo" : "Descrição"}</summary>
+        <Html html={table ? html.replace(table, "") : html} />
+      </Details>
+    </Panel>
+  );
+};
+
+/** Antecedente: perícias e talento concedidos, como selos curtos. */
+const grantsOf = (srd: Srd, d: SrdDoc) =>
+  (d.advancement ?? []).flatMap((a) => {
+    if (a.type === "Trait")
+      return (a.config.grants ?? [])
+        .filter((g: string) => g.startsWith("skills:"))
+        .map((g: string) => traitLabel(srd, g));
+    if (a.type === "ItemGrant")
+      return (a.config.items ?? []).map((id: string) => srd.docs[id]?.name);
+    return [];
+  });
+
+/** Prévia do personagem durante a criação. */
+const Summary = ({ srd, character: c }: { srd: Srd; character: Character }) => {
+  const scores = abilityScores(srd, c);
+  const cls = c.classes[0] ? srd.docs[c.classes[0].classId] : undefined;
+  const lines = [
+    cls,
+    c.speciesId ? srd.docs[c.speciesId] : undefined,
+    c.backgroundId ? srd.docs[c.backgroundId] : undefined,
+  ];
+  return (
+    <Panel style={{ marginTop: 22 }}>
+      <IlluminatedName name={c.name || "Seu personagem"} size={46} />
+      <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+        {lines.map((d, i) =>
+          d ? (
+            <div
+              key={d.id}
+              style={{ display: "flex", alignItems: "center", gap: 10 }}
+            >
+              <Medallion name={d.identifier ?? ""} size={30} lit />
+              <span>{d.name}</span>
+            </div>
+          ) : (
+            <Muted key={i} style={{ fontSize: 14, paddingLeft: 40 }}>
+              {["Classe", "Espécie", "Antecedente"][i]} a escolher
+            </Muted>
+          )
+        )}
+      </div>
+      {cls ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 6,
+            marginTop: 14,
+          }}
+        >
+          {ABILITIES.map((ab) => (
+            <div
+              key={ab}
+              style={{
+                textAlign: "center",
+                padding: "4px 0",
+                borderRadius: 8,
+                border: `1px solid ${color.rule}`,
+              }}
+            >
+              <div style={{ fontSize: 12, color: color.inkSoft }}>
+                {ABILITY_SHORT[ab]}
+              </div>
+              <div style={{ fontWeight: 600 }}>{scores[ab]}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </Panel>
   );
 };
 
@@ -543,9 +954,16 @@ const EquipmentNodeEditor = ({
     const options = categoryItems(srd, node);
     return (
       <div style={{ margin: "6px 0 12px" }}>
-        <Label as="div">Escolha {describeNode(srd, node)}</Label>
+        <Label
+          as="div"
+          style={{ color: choice[node.id] ? color.inkSoft : color.gold }}
+        >
+          {choice[node.id] ? "" : "Falta escolher: "}
+          {describeNode(srd, node)}
+        </Label>
         {options.map((d) => (
           <Chip
+            aria-pressed={choice[node.id] === d.id}
             key={d.id}
             selected={choice[node.id] === d.id}
             onClick={() => onChoice({ ...choice, [node.id]: d.id })}
@@ -822,17 +1240,14 @@ const SpellStep = ({
                 {chosenCantrips.length} de {l.cantrips}
               </Muted>
               <div style={{ marginTop: 8 }}>
-                {cantripIds.map((id) => (
-                  <DocChoice
-                    key={id}
-                    srd={srd}
-                    id={id}
-                    selected={chosenCantrips.includes(id)}
-                    onSelect={() =>
-                      toggle("known", id, l.cantrips, chosenCantrips)
-                    }
-                  />
-                ))}
+                <OptionGrid
+                  srd={srd}
+                  ids={cantripIds}
+                  chosen={chosenCantrips}
+                  onToggle={(id) =>
+                    toggle("known", id, l.cantrips, chosenCantrips)
+                  }
+                />
               </div>
             </>
           ) : null}
@@ -844,18 +1259,14 @@ const SpellStep = ({
                 círculo
               </Muted>
               <div style={{ marginTop: 8 }}>
-                {spellIds.map((id) => (
-                  <DocChoice
-                    key={id}
-                    srd={srd}
-                    id={id}
-                    subtitle={`${srd.docs[id].level}º círculo`}
-                    selected={chosenPrepared.includes(id)}
-                    onSelect={() =>
-                      toggle("prepared", id, l.prepared, chosenPrepared)
-                    }
-                  />
-                ))}
+                <OptionGrid
+                  srd={srd}
+                  ids={spellIds}
+                  chosen={chosenPrepared}
+                  onToggle={(id) =>
+                    toggle("prepared", id, l.prepared, chosenPrepared)
+                  }
+                />
               </div>
             </>
           ) : null}

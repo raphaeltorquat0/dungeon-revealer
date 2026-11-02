@@ -28,13 +28,21 @@ export default ({
     res.status(404).json({ data: null, error: { code: "ERR_NOT_FOUND" } });
 
   router.get("/characters", roleMiddleware.pc, async (_, res) => {
-    const files = (await fs.readdir(directory)).filter((f) =>
-      f.endsWith(".json")
-    );
-    const characters = await Promise.all(
-      files.map((f) => fs.readJson(path.join(directory, f)).catch(() => null))
-    );
-    res.json({ data: characters.filter(Boolean), error: null });
+    try {
+      await fs.mkdirp(directory);
+      const files = (await fs.readdir(directory)).filter((f) =>
+        f.endsWith(".json")
+      );
+      const characters = await Promise.all(
+        files.map((f) => fs.readJson(path.join(directory, f)).catch(() => null))
+      );
+      res.json({ data: characters.filter(Boolean), error: null });
+    } catch (err) {
+      console.error(err);
+      res
+        .status(500)
+        .json({ data: null, error: { code: "ERR_CHARACTERS_READ" } });
+    }
   });
 
   router.get("/characters/:id", roleMiddleware.pc, async (req, res) => {
@@ -61,6 +69,7 @@ export default ({
     }
     const character = { ...body, id, updatedAt: new Date().toISOString() };
     // grava e renomeia para nunca deixar uma ficha pela metade no disco
+    await fs.mkdirp(directory);
     const tmp = `${fileOf(id)}.${randomUUID()}.tmp`;
     await fs.writeJson(tmp, character);
     await fs.move(tmp, fileOf(id), { overwrite: true });

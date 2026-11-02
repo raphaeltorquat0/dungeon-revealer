@@ -148,11 +148,15 @@ export const describeNode = (srd: Srd, n: EquipmentNode): string => {
   if (n.type === "AND" || n.type === "OR")
     return n.children
       .map((c) => describeNode(srd, c))
+      .filter(Boolean)
       .join(n.type === "AND" ? ", " : " ou ");
   if (n.type === "linked")
-    return `${n.count && n.count > 1 ? `${n.count} × ` : ""}${
-      srd.docs[n.key ?? ""]?.name ?? "item"
-    }`;
+    // referência fora do SRD: some da descrição em vez de aparecer como "item"
+    return srd.docs[n.key ?? ""]
+      ? `${n.count && n.count > 1 ? `${n.count} × ` : ""}${
+          srd.docs[n.key ?? ""].name
+        }`
+      : "";
   if (n.type === "currency")
     return `${n.count} ${String(n.key)
       .toUpperCase()
