@@ -13,7 +13,7 @@ import {
 
 const srd: Srd = JSON.parse(
   fs.readFileSync(
-    path.join(__dirname, "../../character-builder/data/srd52.en.json"),
+    path.join(__dirname, "../../character-builder/fonte/srd52.en.json"),
     "utf8"
   )
 );

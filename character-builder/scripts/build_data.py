@@ -1,6 +1,6 @@
 """Gera public/srd52.json (o que o app carrega) a partir do SRD em inglês e da tradução PT-BR.
 
-Uso: python build_data.py data/srd52.en.json i18n/srd52.pt-BR.json ../public/srd52.json
+Uso: python build_data.py fonte/srd52.en.json i18n/srd52.pt-BR.json ../public/srd52.json
 O texto traduzido substitui o inglês; o nome original fica em nameEn. Remove notas internas do Foundry.
 """
 import json, re, sys

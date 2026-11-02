@@ -1,6 +1,6 @@
 """Divide nomes e descrições do SRD em lotes para tradução.
 
-Uso: python split_for_translation.py data/srd52.en.json <pasta-de-saida>
+Uso: python split_for_translation.py fonte/srd52.en.json <pasta-de-saida>
 Gera nomes.en.json (todos os nomes e títulos) e loteNN-<grupo>.en.json (descrições, ~11 mil palavras cada).
 Descrições de itens mágicos ficam de fora (só o nome é traduzido).
 """
