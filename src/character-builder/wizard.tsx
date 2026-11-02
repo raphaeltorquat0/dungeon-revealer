@@ -1,6 +1,6 @@
 import * as React from "react";
 import styled from "@emotion/styled/macro";
-import { BACKGROUND_LORE, CLASS_LORE, SPECIES_LORE } from "./lore";
+import { BACKGROUND_LORE, CLASS_LORE, PLAYSTYLES, SPECIES_LORE } from "./lore";
 import {
   ABILITIES,
   ABILITY_LABEL,
@@ -13,19 +13,21 @@ import {
   traitLabel,
 } from "./srd";
 import {
-  abilityScores,
   Character,
+  Root,
+  STANDARD_ARRAY,
+  abilityScores,
+  averageHitDie,
   decisions,
   isDecisionDone,
   levelUp,
   modifier,
   pointBuySpent,
-  Root,
   sheet,
   spellLimits,
-  STANDARD_ARRAY,
 } from "./rules";
 import { DecisionEditor, DocChoice, OptionGrid } from "./decision";
+import { classLine } from "./sheet";
 import {
   categoryItems,
   describeNode,
@@ -98,6 +100,27 @@ export const Wizard = ({
   );
   const c = character;
   const hasClass = c.classes.length > 0;
+  const [playstyle, setPlaystyle] = React.useState<string | null>(null);
+  const startLevel = c.classes[0]?.level ?? 1;
+  const setStartLevel = (level: number) => {
+    const entry = c.classes[0];
+    if (!entry || level < 1 || level > 20) return;
+    // criar já em qualquer nível: PV pela média; as escolhas dos níveis aparecem em "Escolhas da classe"
+    const avg = averageHitDie(srd, entry.classId);
+    onChange({
+      ...c,
+      classes: [
+        {
+          ...entry,
+          level,
+          hitPoints: Array.from(
+            { length: level - 1 },
+            (_, i) => entry.hitPoints[i] ?? avg
+          ),
+        },
+      ],
+    });
+  };
   const caster = spellLimits(srd, c).length > 0;
 
   const docsOfType = (type: string) =>
@@ -131,19 +154,34 @@ export const Wizard = ({
   const choicesFor = (root: Root) => {
     const list = decisions(srd, c).filter((d) => d.root === root);
     if (!list.length) return null;
+    const editor = (d: typeof list[number]) => (
+      <DecisionEditor
+        key={d.key}
+        srd={srd}
+        character={c}
+        decision={d}
+        onChange={onChange}
+      />
+    );
+    if (root !== "class" || startLevel === 1)
+      return (
+        <Panel>
+          <H2 style={{ marginTop: 0 }}>Suas escolhas</H2>
+          {list.map(editor)}
+        </Panel>
+      );
+    const levels = [...new Set(list.map((d) => Math.max(1, d.advLevel)))].sort(
+      (x, y) => x - y
+    );
     return (
-      <Panel>
-        <H2 style={{ marginTop: 0 }}>Suas escolhas</H2>
-        {list.map((d) => (
-          <DecisionEditor
-            key={d.key}
-            srd={srd}
-            character={c}
-            decision={d}
-            onChange={onChange}
-          />
+      <>
+        {levels.map((lvl) => (
+          <Panel key={lvl}>
+            <H2 style={{ marginTop: 0 }}>Nível {lvl}</H2>
+            {list.filter((d) => Math.max(1, d.advLevel) === lvl).map(editor)}
+          </Panel>
         ))}
-      </Panel>
+      </>
     );
   };
 
@@ -175,23 +213,105 @@ export const Wizard = ({
       title: "Classe",
       done: () => hasClass,
       render: () => (
-        <Chooser
-          wide={wide}
-          srd={srd}
-          lead="A classe define o que o personagem faz em combate, que magia usa e como cresce."
-          items={docsOfType("class")}
-          selectedId={c.classes[0]?.classId}
-          onSelect={selectClass}
-          icon={(d) => d.identifier ?? ""}
-          tagline={(d) => CLASS_LORE[d.identifier ?? ""]?.tagline}
-          meta={(d) => [
-            `Dado de Vida ${d.hitDie}`,
-            (d.primaryAbility?.value ?? [])
-              .map((ab) => ABILITY_SHORT[ab])
-              .join(d.primaryAbility?.all ? " e " : " ou "),
-            CLASS_LORE[d.identifier ?? ""]?.role,
-          ]}
-        />
+        <>
+          {hasClass ? (
+            <Panel
+              style={{
+                marginTop: 0,
+                marginBottom: 18,
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 14,
+              }}
+            >
+              <Medallion
+                name={srd.docs[c.classes[0].classId].identifier ?? ""}
+                size={44}
+                lit
+              />
+              <span style={{ flex: "1 1 200px" }}>
+                <span style={{ fontFamily: display, fontSize: 22 }}>
+                  Nível inicial
+                </span>
+                <Muted style={{ display: "block", fontSize: 14 }}>
+                  Comece no nível que a campanha pede. As escolhas de cada nível
+                  aparecem em "Escolhas da classe".
+                </Muted>
+              </span>
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Chip
+                  style={{ margin: 0, minWidth: 44 }}
+                  aria-label="Diminuir nível inicial"
+                  onClick={() => setStartLevel(startLevel - 1)}
+                >
+                  −
+                </Chip>
+                <span
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 600,
+                    minWidth: 40,
+                    textAlign: "center",
+                  }}
+                >
+                  {startLevel}
+                </span>
+                <Chip
+                  style={{ margin: 0, minWidth: 44 }}
+                  aria-label="Aumentar nível inicial"
+                  onClick={() => setStartLevel(startLevel + 1)}
+                >
+                  +
+                </Chip>
+              </span>
+            </Panel>
+          ) : null}
+          <Chooser
+            wide={wide}
+            srd={srd}
+            lead="A classe define o que o personagem faz em combate, que magia usa e como cresce."
+            items={docsOfType("class")}
+            selectedId={c.classes[0]?.classId}
+            onSelect={selectClass}
+            icon={(d) => d.identifier ?? ""}
+            dim={(d) =>
+              Boolean(playstyle) &&
+              !PLAYSTYLES[playstyle!].includes(d.identifier ?? "")
+            }
+            extra={
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: "0 4px",
+                  margin: "0 0 14px",
+                }}
+              >
+                <Muted style={{ marginRight: 8 }}>Como você quer jogar?</Muted>
+                {Object.keys(PLAYSTYLES).map((k) => (
+                  <Chip
+                    key={k}
+                    selected={playstyle === k}
+                    aria-pressed={playstyle === k}
+                    onClick={() => setPlaystyle(playstyle === k ? null : k)}
+                  >
+                    {k}
+                  </Chip>
+                ))}
+              </div>
+            }
+            tagline={(d) => CLASS_LORE[d.identifier ?? ""]?.tagline}
+            meta={(d) => [
+              `Dado de Vida ${d.hitDie}`,
+              (d.primaryAbility?.value ?? [])
+                .map((ab) => ABILITY_SHORT[ab])
+                .join(d.primaryAbility?.all ? " e " : " ou "),
+              CLASS_LORE[d.identifier ?? ""]?.role,
+            ]}
+          />
+        </>
       ),
     },
     {
@@ -415,6 +535,23 @@ export const Wizard = ({
         </div>
       ),
     },
+    {
+      id: "revisao",
+      title: "Revisão",
+      done: () => steps.slice(0, -1).every((x) => x.done(c)),
+      render: () => (
+        <Review
+          srd={srd}
+          character={c}
+          wide={wide}
+          pending={steps.slice(0, -1).map((x, i) => ({
+            title: x.title,
+            done: x.done(c),
+            go: () => go(i),
+          }))}
+        />
+      ),
+    },
   ];
 
   const step = steps[Math.min(stepIndex, steps.length - 1)];
@@ -584,6 +721,8 @@ const Chooser = ({
   icon,
   tagline,
   meta,
+  dim,
+  extra,
 }: {
   wide: boolean;
   srd: Srd;
@@ -594,6 +733,8 @@ const Chooser = ({
   icon: (d: SrdDoc) => string;
   tagline: (d: SrdDoc) => string | undefined;
   meta: (d: SrdDoc) => (string | undefined)[];
+  dim?: (d: SrdDoc) => boolean;
+  extra?: React.ReactNode;
 }) => {
   const selected = selectedId ? srd.docs[selectedId] : undefined;
   const detail = selected ? (
@@ -604,10 +745,11 @@ const Chooser = ({
       tagline={tagline(selected)}
     />
   ) : null;
-  const showSide = wide && window.innerWidth >= 1240;
+  const showSide = wide && window.innerWidth >= 1240 && Boolean(selected);
   return (
     <>
       <Lead>{lead}</Lead>
+      {extra}
       <div
         style={{
           display: showSide ? "grid" : "block",
@@ -620,7 +762,7 @@ const Chooser = ({
           style={{
             display: "grid",
             gridTemplateColumns: wide
-              ? "repeat(auto-fill, minmax(200px, 1fr))"
+              ? "repeat(auto-fill, minmax(220px, 1fr))"
               : "1fr",
             gap: 12,
           }}
@@ -634,6 +776,7 @@ const Chooser = ({
                 selected={sel}
                 aria-pressed={sel}
                 onClick={() => onSelect(d.id)}
+                style={{ opacity: dim?.(d) && !sel ? 0.38 : 1 }}
               >
                 <Medallion name={icon(d)} size={wide ? 60 : 52} lit={sel} />
                 <span
@@ -713,7 +856,7 @@ const CardButton = styled.button<{ selected?: boolean; row?: boolean }>`
   flex-direction: ${(p) => (p.row ? "row" : "column")};
   align-items: ${(p) => (p.row ? "flex-start" : "stretch")};
   gap: ${(p) => (p.row ? "14px" : "10px")};
-  min-height: ${(p) => (p.row ? "0" : "200px")};
+  min-height: ${(p) => (p.row ? "0" : "176px")};
   padding: 16px;
   border-radius: 16px;
   border: 1px solid ${(p) => (p.selected ? color.gold : color.rule)};
@@ -1275,3 +1418,168 @@ const SpellStep = ({
     })}
   </>
 );
+
+/** Revisão final: os números calculados e o que ainda falta, com atalho para cada passo. */
+const Review = ({
+  srd,
+  character: c,
+  wide,
+  pending,
+}: {
+  srd: Srd;
+  character: Character;
+  wide: boolean;
+  pending: { title: string; done: boolean; go: () => void }[];
+}) => {
+  const s = sheet(srd, c);
+  const missing = pending.filter((p) => !p.done);
+  const skills = Object.entries(s.skills)
+    .filter(([, v]) => v.proficient)
+    .map(
+      ([k, v]) =>
+        `${traitLabel(srd, `skills:${k}`)} ${signed(v.bonus)}${
+          v.expertise ? " (especialização)" : ""
+        }`
+    );
+  const other = [...s.traits]
+    .filter((t) => /^(armor|weapon|tool|languages|dr):/.test(t))
+    .map((t) => traitLabel(srd, t));
+  const spells = [...c.spells.known, ...c.spells.prepared]
+    .map((id) => srd.docs[id]?.name)
+    .filter(Boolean);
+  const items = c.inventory
+    .map((i) => (i.itemId ? srd.docs[i.itemId]?.name : i.name))
+    .filter(Boolean);
+  const stat = (label: string, value: React.ReactNode) => (
+    <div style={{ textAlign: "center", minWidth: 80 }}>
+      <div style={{ fontSize: 30, fontWeight: 600, lineHeight: 1.1 }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 13, color: color.inkSoft }}>{label}</div>
+    </div>
+  );
+  const block = (title: string, body: React.ReactNode) => (
+    <Panel style={{ marginTop: 0 }}>
+      <div style={{ fontFamily: display, fontSize: 21, marginBottom: 6 }}>
+        {title}
+      </div>
+      {body}
+    </Panel>
+  );
+  return (
+    <>
+      {missing.length ? (
+        <Panel
+          style={{ marginTop: 0, marginBottom: 16, borderColor: color.gold }}
+        >
+          <div style={{ fontFamily: display, fontSize: 21, color: color.gold }}>
+            Falta pouco
+          </div>
+          <div
+            style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}
+          >
+            {missing.map((m) => (
+              <Button key={m.title} onClick={m.go} style={{ minHeight: 40 }}>
+                Resolver: {m.title}
+              </Button>
+            ))}
+          </div>
+        </Panel>
+      ) : null}
+      <Panel style={{ marginTop: 0 }}>
+        <IlluminatedName name={c.name || "Sem nome"} size={wide ? 72 : 56}>
+          <Muted>{classLine(srd, c)}</Muted>
+        </IlluminatedName>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "space-around",
+            gap: 12,
+            marginTop: 18,
+          }}
+        >
+          {stat("CA", s.ac)}
+          {stat("Pontos de Vida", s.maxHp)}
+          {stat("Iniciativa", signed(s.initiative))}
+          {stat("Deslocamento", feetToMeters(s.speed))}
+          {stat("Proficiência", signed(s.proficiencyBonus))}
+          {stat("Percepção passiva", s.passivePerception)}
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+            gap: 6,
+            marginTop: 18,
+          }}
+        >
+          {ABILITIES.map((ab) => (
+            <div
+              key={ab}
+              style={{
+                textAlign: "center",
+                border: `1px solid ${color.rule}`,
+                borderRadius: 10,
+                padding: "6px 2px",
+              }}
+            >
+              <div style={{ fontSize: 12, color: color.inkSoft }}>
+                {ABILITY_SHORT[ab]}
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 600 }}>
+                {signed(s.modifiers[ab])}
+              </div>
+              <div style={{ fontSize: 13 }}>{s.scores[ab]}</div>
+            </div>
+          ))}
+        </div>
+      </Panel>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: wide ? "1fr 1fr" : "1fr",
+          gap: 16,
+          marginTop: 16,
+        }}
+      >
+        {block("Perícias", <Muted>{skills.join(", ") || "Nenhuma"}</Muted>)}
+        {block(
+          "Proficiências e idiomas",
+          <Muted>{other.join(", ") || "Nenhuma"}</Muted>
+        )}
+        {block(
+          "Ataques",
+          s.attacks.map((a) => (
+            <div
+              key={a.name}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 8,
+                padding: "3px 0",
+              }}
+            >
+              <span>{a.name}</span>
+              <Muted>
+                {signed(a.toHit)}, {a.damage}
+              </Muted>
+            </div>
+          ))
+        )}
+        {block("Magias", <Muted>{spells.join(", ") || "Nenhuma"}</Muted>)}
+        {block(
+          "Equipamento",
+          <Muted>
+            {items.join(", ") || "Nada"}
+            {c.currency.gp ? `. ${c.currency.gp} PO` : ""}
+          </Muted>
+        )}
+        {block(
+          "Características",
+          <Muted>{s.features.map((f) => f.doc.name).join(", ")}</Muted>
+        )}
+      </div>
+    </>
+  );
+};

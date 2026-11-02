@@ -69,3 +69,13 @@ export const BACKGROUND_LORE: Record<string, string> = {
   sage: "Passou anos entre livros e mestres.",
   soldier: "Treinou e lutou em fileiras de batalha.",
 };
+
+/** Estilos de jogo para sugerir classes, como o "Try out Cleric or Bard" do Roll20. */
+export const PLAYSTYLES: Record<string, string[]> = {
+  "Linha de frente": ["barbarian", "fighter", "paladin"],
+  "Magia ofensiva": ["sorcerer", "wizard", "warlock"],
+  "Cura e apoio": ["cleric", "bard", "druid", "paladin"],
+  "Furtividade e precisão": ["rogue", "ranger", "monk"],
+  "Combate à distância": ["ranger", "warlock", "fighter"],
+  "Primeira vez jogando": ["fighter", "barbarian", "cleric"],
+};
