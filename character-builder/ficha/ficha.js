@@ -21,10 +21,7 @@
   const sg = (n) => (n >= 0 ? "+" + n : "" + n);
   const m = (ft) => R.feetToMeters(Number(ft));
   const doc = (id) => SRD.docs[id];
-  const icon = (name) =>
-    R.ICONS[name]
-      ? `<svg viewBox="0 0 512 512" aria-hidden="true"><path d="${R.ICONS[name]}"/></svg>`
-      : "";
+  const icon = (name, size) => window.ico(name, size || 24);
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const byName = (a, b) => doc(a).name.localeCompare(doc(b).name, "pt-BR");
   const uid = () =>
@@ -315,8 +312,8 @@
     const cls = c.classes[0] && doc(c.classes[0].classId);
     const inner = c.portrait
       ? `<img src="${esc(c.portrait)}" alt="">`
-      : cls && R.ICONS[cls.identifier]
-      ? icon(cls.identifier)
+      : cls
+      ? icon(cls.identifier, 48)
       : esc((c.name.trim()[0] || "?").toUpperCase());
     const lvl = R.totalLevel(c);
     return `<div class="portrait">${inner}${
@@ -363,9 +360,7 @@
         )}">
           ${portrait(c)}
           <span style="min-width:0;flex:1">
-            <span class="cond" style="font-size:20px;display:block">${esc(
-              c.name || "Sem nome"
-            )}</span>
+            <span class="name">${esc(c.name || "Sem nome")}</span>
             <span class="muted">${esc(classLine(c))}${
           c.player ? " · " + esc(c.player) : ""
         }</span>
@@ -396,13 +391,16 @@
         ${cards}
         <button class="frame card" data-act="sample">
           ${portrait(sample())}
-          <span><span class="cond" style="font-size:20px;display:block">Ficha de exemplo</span><span class="muted">Elowen Ventoalto · Maga 3, pronta para explorar</span></span>
+          <span><span class="name">Ficha de exemplo</span><span class="muted">Elowen Ventoalto · Maga 3, pronta para explorar</span></span>
         </button>
-        <button class="new" data-act="new"><span><span class="cond" style="font-size:22px;color:var(--red2)">+ Criar personagem</span></span></button>
+        <button class="new" data-act="new"><span style="display:flex;gap:10px;align-items:center">${icon(
+          "plus",
+          20
+        )} Criar personagem</span></button>
       </div>
       <p class="sub" style="margin-top:40px;max-width:80ch">${esc(
         SRD.meta.attribution
-      )} Ícones de game-icons.net (Lorc e Delapouite), CC BY 3.0.</p>
+      )}</p>
     </div>`;
   };
 
@@ -456,7 +454,7 @@
     const pending = R.decisions(SRD, c).filter((d) => !R.isDecisionDone(d));
     const t = s.traits;
     const ab = R.ABILITIES.map(
-      (k) => `<div class="frame ab"><div class="k">${
+      (k) => `<div class="frame ab"><div class="k">${icon(k, 15)}${
         R.ABILITY_SHORT[k]
       }</div><div class="n">${R.ABILITY_LABEL[k]}</div>
       <div class="m">${sg(s.modifiers[k])}</div><div class="s">${
@@ -519,9 +517,15 @@
       .join("");
 
     const left = `
-      <div class="frame"><div class="title">Testes de Resistência</div>${saves}</div>
-      <div class="frame"><div class="title">Perícias <span class="right sub">● proficiente ◉ especialização</span></div>${skills}</div>
-      <div class="frame"><div class="title">Sentidos</div>
+      <div class="frame"><div class="title">${icon(
+        "shield",
+        15
+      )}Testes de Resistência</div>${saves}</div>
+      <div class="frame"><div class="title">${icon(
+        "d20",
+        15
+      )}Perícias <span class="legend"><span><span class="prof p"></span>proficiente</span><span><span class="prof e"></span>especialização</span></span></div>${skills}</div>
+      <div class="frame"><div class="title">${icon("eye", 15)}Sentidos</div>
         <div class="row"><span class="val">${
           s.passivePerception
         }</span><span class="nm">Percepção passiva</span></div>
@@ -539,31 +543,36 @@
             : ""
         }
       </div>
-      <div class="frame"><div class="title">Proficiências e Idiomas</div>${profs}</div>`;
+      <div class="frame"><div class="title">${icon(
+        "list",
+        15
+      )}Proficiências e Idiomas</div>${profs}</div>`;
 
     const center = `
       <div class="stats">
-        <div class="frame stat"><div class="shield"><span>${
+        <div class="frame stat"><div class="shield"><svg viewBox="0 0 84 96" aria-hidden="true"><defs><linearGradient id="sh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#26262f"/><stop offset="1" stop-color="#0b0b0f"/></linearGradient></defs><path d="M42 2 80 14v30c0 26-17 41-38 50C21 85 4 70 4 44V14z" fill="url(#sh)" stroke="#c23a2e" stroke-width="2"/><path d="M42 10 72 20v24c0 21-13 33-30 41C25 77 12 65 12 44V20z" fill="none" stroke="#3a3a44"/></svg><span>${
           s.ac
         }</span></div><div class="l">Classe de Armadura</div></div>
         <div class="frame stat"><div class="v" style="margin-top:14px">${sg(
           s.initiative
-        )}</div><div class="l">Iniciativa</div>
-          <div class="sub" style="margin-top:6px">${m(
-            s.speed
-          )} de deslocamento</div></div>
+        )}</div><div class="l">${icon("bonus", 13)}Iniciativa</div>
+          <div class="sub" style="margin-top:6px;display:flex;gap:5px;justify-content:center;align-items:center">${icon(
+            "boot",
+            14
+          )}${m(s.speed)} de deslocamento</div></div>
         <div class="frame stat"><div class="v">${sg(
           s.proficiencyBonus
-        )}</div><div class="l">Bônus de Proficiência</div></div>
+        )}</div><div class="l">${icon("plus", 13)}Proficiência</div></div>
         <button class="frame stat insp ${
           c.state.inspiration ? "on" : ""
         }" data-act="insp" style="color:inherit">
-          <div class="v">${
-            c.state.inspiration ? "★" : "☆"
-          }</div><div class="l">Inspiração Heroica</div></button>
+          <div class="v">${icon(
+            "star",
+            30
+          )}</div><div class="l">Inspiração Heroica</div></button>
       </div>
       <div class="frame">
-        <div class="title">Pontos de Vida</div>
+        <div class="title">${icon("heart", 15)}Pontos de Vida</div>
         <div class="hp-top">
           <div><div class="big" style="${
             hp / s.maxHp <= 0.25 ? "color:var(--red2)" : ""
@@ -580,13 +589,22 @@
           hp / s.maxHp <= 0.25 ? "low" : ""
         }" style="width:${Math.max(0, (hp / s.maxHp) * 100)}%"></div></div>
         <div class="hp-ctl">
-          <button class="btn" data-act="hp" data-mode="heal" style="border-color:var(--green)">Curar</button>
-          <button class="btn red" data-act="hp" data-mode="dmg">Dano</button>
+          <button class="btn heal" data-act="hp" data-mode="heal">${icon(
+            "plus",
+            14
+          )}Curar</button>
+          <button class="btn red" data-act="hp" data-mode="dmg">${icon(
+            "attack",
+            14
+          )}Dano</button>
           <input class="field" id="hp-amt" type="number" inputmode="numeric" min="0" placeholder="0" aria-label="Quantidade">
           <button class="btn" data-act="hp" data-mode="temp">Temp.</button>
         </div>
       </div>
-      <div class="frame"><div class="title">Dados de Vida</div>
+      <div class="frame"><div class="title">${icon(
+        "d20",
+        15
+      )}Dados de Vida</div>
         ${s.hitDice
           .map(
             (h) =>
@@ -601,7 +619,10 @@
           )
           .join("")}
       </div>
-      <div class="frame"><div class="title">Testes contra a Morte</div>
+      <div class="frame"><div class="title">${icon(
+        "skull",
+        15
+      )}Testes contra a Morte</div>
         <div class="row"><span class="nm">Sucessos</span>${pips(
           3,
           c.state.deathSaves.success,
@@ -617,7 +638,10 @@
           "fail"
         )}</div>
       </div>
-      <div class="frame"><div class="title">Defesas e Condições</div>
+      <div class="frame"><div class="title">${icon(
+        "shield",
+        15
+      )}Defesas e Condições</div>
         <div style="margin-bottom:8px"><div class="sub cond">Resistências</div>${
           resist.length
             ? esc(
@@ -638,19 +662,19 @@
       </div>`;
 
     const TABS = [
-      ["acoes", "Ações"],
-      ["magias", "Magias"],
-      ["equip", "Equipamento"],
-      ["tracos", "Características e Traços"],
-      ["desc", "Descrição"],
-      ["notas", "Notas"],
-      ["uso", "Uso Limitado"],
+      ["acoes", "Ações", "attack"],
+      ["magias", "Magias", "spell"],
+      ["equip", "Equipamento", "bag"],
+      ["tracos", "Características", "book"],
+      ["desc", "Descrição", "user"],
+      ["notas", "Notas", "scroll"],
+      ["uso", "Uso Limitado", "limited"],
     ];
     const tabs = `<div class="tabs" role="tablist">${TABS.map(
-      ([k, l]) =>
-        `<button role="tab" class="${
+      ([k, l, i]) =>
+        `<button role="tab" aria-selected="${state.tab === k}" class="${
           state.tab === k ? "on" : ""
-        }" data-act="tab" data-t="${k}">${l}</button>`
+        }" data-act="tab" data-t="${k}">${icon(i, 15)}${l}</button>`
     ).join("")}</div>`;
     const body = {
       acoes: actionsTab,
@@ -676,11 +700,26 @@
             c.player ? "Jogador: " + esc(c.player) : ""
           } <span id="save-status">${esc(store.status)}</span></div></div>
         <div class="head-actions">
-          <button class="btn" data-act="rest-short">Descanso Curto</button>
-          <button class="btn" data-act="rest-long">Descanso Longo</button>
-          <button class="btn" data-act="manage">Gerenciar</button>
-          <button class="btn red" data-act="levelup">Subir de Nível</button>
-          <button class="btn ghost" data-act="home" aria-label="Voltar às fichas">Fichas</button>
+          <button class="btn" data-act="rest-short" title="Descanso Curto">${icon(
+            "moon",
+            15
+          )}<span class="t">Descanso Curto</span></button>
+          <button class="btn" data-act="rest-long" title="Descanso Longo">${icon(
+            "fire",
+            15
+          )}<span class="t">Descanso Longo</span></button>
+          <button class="btn" data-act="manage" title="Gerenciar no builder">${icon(
+            "gear",
+            15
+          )}<span class="t">Gerenciar</span></button>
+          <button class="btn red" data-act="levelup">${icon(
+            "up",
+            15
+          )}Subir de Nível</button>
+          <button class="btn ghost" data-act="home" aria-label="Voltar às fichas">${icon(
+            "back",
+            15
+          )}<span class="t">Fichas</span></button>
         </div>
       </div>
       ${
@@ -795,11 +834,20 @@
       ["other", "Outros"],
       ["limited", "Uso Limitado"],
     ];
+    const FI = {
+      all: "list",
+      attack: "attack",
+      action: "action",
+      bonus: "bonus",
+      reaction: "reaction",
+      other: "other",
+      limited: "limited",
+    };
     const filters = `<div class="filters">${F.map(
       ([k, l]) =>
         `<button class="${
           state.filter === k ? "on" : ""
-        }" data-act="filter" data-f="${k}">${l}</button>`
+        }" data-act="filter" data-f="${k}">${icon(FI[k], 13)}${l}</button>`
     ).join("")}</div>`;
     if (state.filter === "limited") return filters + limitedTab(c, s);
     const show = rows.filter(
@@ -822,13 +870,16 @@
             return `<div class="grouph">${title}</div><table class="list"><thead><tr><th>Nome</th><th>Alcance</th><th>Acerto / CD</th><th>Dano</th></tr></thead><tbody>${g
               .map(
                 (r) =>
-                  `<tr><td>${esc(r.name)}<div class="sub">${esc(r.sub)}${
+                  `<tr><td><div class="nm-cell">${icon(
+                    r.docId ? "spell" : "attack",
+                    16
+                  )}<div>${esc(r.name)}<div class="sub">${esc(r.sub)}${
                     r.extra ? " · " + esc(r.extra) : ""
-                  }</div></td><td class="n">${esc(
+                  }</div></div></div></td><td class="n">${esc(
                     r.range
-                  )}</td><td class="n hit">${esc(r.hit)}</td><td class="n">${
-                    esc(r.dmg) || "–"
-                  }</td></tr>`
+                  )}</td><td class="n hit"><span>${esc(
+                    r.hit
+                  )}</span></td><td class="n">${esc(r.dmg) || "–"}</td></tr>`
               )
               .join("")}</tbody></table>`;
           return `<div class="grouph">${title}</div>${g
@@ -926,7 +977,12 @@
       )
       .join("");
     return `${head}${
-      slots ? `<div class="title">Espaços de Magia</div>${slots}` : ""
+      slots
+        ? `<div class="title">${icon(
+            "spell",
+            15
+          )}Espaços de Magia</div>${slots}`
+        : ""
     }
       ${list || '<p class="muted">Nenhuma magia.</p>'}
       ${
@@ -955,7 +1011,7 @@
           : 0),
       0
     );
-    return `<div class="title">Moedas</div>
+    return `<div class="title">${icon("bag", 15)}Moedas</div>
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">${[
         ["pp", "PL"],
         ["gp", "PO"],
@@ -1054,12 +1110,12 @@
     const bg = c.backgroundId && doc(c.backgroundId);
     const sp = c.speciesId && doc(c.speciesId);
     return `<div class="stats" style="grid-template-columns:1fr 1fr">
-        <div class="frame"><div class="title">Antecedente</div><b class="cond" style="font-size:18px">${
+        <div class="frame"><div class="title">Antecedente</div><b style="font-size:17px;font-weight:800">${
           bg ? esc(bg.name) : "–"
         }</b><div class="sub">${
       bg ? esc(R.BACKGROUND_LORE[bg.identifier] || "") : ""
     }</div></div>
-        <div class="frame"><div class="title">Espécie</div><b class="cond" style="font-size:18px">${
+        <div class="frame"><div class="title">Espécie</div><b style="font-size:17px;font-weight:800">${
           sp ? esc(sp.name) : "–"
         }</b><div class="sub">${
       sp ? esc(R.SPECIES_LORE[sp.identifier] || "") : ""
@@ -1396,7 +1452,10 @@
   const optCard = (d, on, act, sub, tags) => `<button class="frame opt ${
     on ? "on" : ""
   }" data-act="${act}" data-id="${d.id}" aria-pressed="${on}">
-      <span class="ico">${icon(d.identifier)}</span>
+      <span class="ico">${icon(
+        d.identifier,
+        28
+      )}</span><span class="check">${icon("check", 12)}</span>
       <span style="min-width:0"><b>${esc(d.name)}</b>${
     sub
       ? `<span class="sub" style="display:block;margin:3px 0 5px">${esc(
@@ -1418,9 +1477,10 @@
       .map(doc)
       .filter(Boolean);
     return `<div class="frame"><div style="display:flex;gap:12px;align-items:center"><span class="opt on" style="padding:0;border:0;background:none"><span class="ico" style="width:58px;height:58px">${icon(
-      d.identifier
+      d.identifier,
+      34
     )}</span></span>
-        <div><div class="cond" style="font-size:24px">${esc(
+        <div><div style="font-size:22px;font-weight:800;letter-spacing:-.01em">${esc(
           d.name
         )}</div><div class="sub">${esc(
       (R.CLASS_LORE[d.identifier] || {}).tagline ||
@@ -1620,7 +1680,7 @@
       body = `${
         sel
           ? `<div class="frame" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:12px">
-            <span style="flex:1 1 220px"><span class="cond" style="font-size:18px">Nível inicial</span><span class="sub" style="display:block">Comece no nível que a campanha pede; as escolhas de cada nível aparecem abaixo.</span></span>
+            <span style="flex:1 1 220px"><span style="font-size:15px;font-weight:800">Nível inicial</span><span class="sub" style="display:block">Comece no nível que a campanha pede; as escolhas de cada nível aparecem abaixo.</span></span>
             <button class="btn" data-act="startlvl" data-d="-1" aria-label="Diminuir nível">−</button><b style="font-size:26px;min-width:36px;text-align:center">${lvl}</b><button class="btn" data-act="startlvl" data-d="1" aria-label="Aumentar nível">+</button></div>`
           : ""
       }
@@ -1657,8 +1717,11 @@
     }
     const last = state.step === STEPS.length - 1;
     return `<div class="wrap">
-      <div class="bhead"><button class="btn ghost" data-act="home">Fichas</button>
-        <h1 class="cond" style="margin:0;font-size:26px">Criação de personagem</h1>
+      <div class="bhead"><button class="btn ghost" data-act="home">${icon(
+        "back",
+        15
+      )}Fichas</button>
+        <h1>Criação de personagem</h1>
         <span class="sub" style="margin-left:auto" id="save-status">${esc(
           store.status
         )}</span></div>
@@ -1669,21 +1732,24 @@
           }" data-act="step" data-i="${i}" aria-current="${
             i === state.step ? "step" : "false"
           }"><span class="num">${
-            s.done(c) ? "✓" : i + 1
+            s.done(c) && i !== state.step ? icon("check", 15) : i + 1
           }</span><span class="lbl">${s.title}</span></button>`
       ).join("")}</nav>
-      <h2 class="cond" style="font-size:22px;margin:0 0 6px;color:var(--red2)">${
-        step.title
-      }</h2>
+      <div class="step-title"><h2>${step.title}</h2><span class="sub">Passo ${
+      state.step + 1
+    } de ${STEPS.length}</span></div>
       ${body}
       <div class="nav"><button class="btn" data-act="step" data-i="${
         state.step - 1
-      }" ${state.step === 0 ? "disabled" : ""}>Anterior</button>
+      }" ${state.step === 0 ? "disabled" : ""}>${icon(
+      "back",
+      15
+    )}Anterior</button>
         ${
           last
             ? `<button class="btn red" data-act="finish" ${
                 STEPS.every((s) => s.done(c)) ? "" : "disabled"
-              }>Concluir ficha</button>`
+              }>${icon("check", 15)}Concluir Ficha</button>`
             : `<button class="btn red" data-act="step" data-i="${
                 state.step + 1
               }">Próximo: ${STEPS[state.step + 1].title}</button>`
@@ -1703,7 +1769,7 @@
               n.id
             }" data-child="${
               x.id
-            }"><span class="ico cond" style="font-size:22px">${String.fromCharCode(
+            }"><span class="ico" style="font-size:20px;font-weight:800">${String.fromCharCode(
               65 + i
             )}</span><span>${esc(R.describeNode(SRD, x))}</span></button>`
         )
@@ -1920,7 +1986,10 @@
           .join("")}</div>
         ${
           lu.classId
-            ? `<div class="frame" style="margin-top:12px"><div class="title">Pontos de Vida</div>
+            ? `<div class="frame" style="margin-top:12px"><div class="title">${icon(
+                "heart",
+                15
+              )}Pontos de Vida</div>
           <button class="chip ${
             lu.roll == null ? "on" : ""
           }" data-act="lu-avg">Média: ${R.averageHitDie(

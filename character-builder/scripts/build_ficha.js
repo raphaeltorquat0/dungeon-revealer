@@ -29,6 +29,9 @@ const html = fs
   )
   .replace("/*SRD*/", () => safe(srd))
   .replace("/*REGRAS*/", () => safe(regras))
+  .replace("/*ICONES*/", () =>
+    safe(fs.readFileSync(path.join(dir, "icones.js"), "utf8"))
+  )
   .replace("/*FICHA*/", () =>
     safe(fs.readFileSync(path.join(dir, "ficha.js"), "utf8"))
   );

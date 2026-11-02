@@ -8,3 +8,4 @@ bin
 # gerados por character-builder/scripts
 public/fichas.html
 public/srd52.json
+character-builder/ficha/template.html
