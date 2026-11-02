@@ -1,6 +1,7 @@
 import * as React from "react";
 import type { SpringValue, SpringStartFn } from "react-spring";
 import type { Dimensions } from "../map-view";
+import type { MapMedia } from "../util";
 import type { ViewportData, PointerEvent } from "react-three-fiber";
 import type { Handlers } from "react-use-gesture/dist/types";
 
@@ -9,7 +10,7 @@ type Vector3D = [number, number, number];
 
 export type SharedMapToolState = {
   ratio: number;
-  mapImage: HTMLImageElement;
+  mapImage: MapMedia;
   mapCanvas: HTMLCanvasElement;
   fogCanvas: HTMLCanvasElement;
   fogTexture: THREE.CanvasTexture;

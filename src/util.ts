@@ -40,6 +40,51 @@ export const loadImage = (src: string) => {
   return { promise, cancel };
 };
 
+export type MapMedia = HTMLImageElement | HTMLVideoElement;
+
+export const getMapMediaSize = (media: MapMedia) =>
+  media instanceof HTMLVideoElement
+    ? { width: media.videoWidth, height: media.videoHeight }
+    : { width: media.naturalWidth, height: media.naturalHeight };
+
+/**
+ * Loads a map as an image and falls back to a muted looping video when the
+ * browser can not decode it as an image. Cancelling also stops a playing video.
+ */
+export const loadMapMedia = (src: string) => {
+  const imageTask = loadImage(src);
+  const video = window.document.createElement("video");
+  let isCancelled = false;
+
+  const cancel = () => {
+    isCancelled = true;
+    imageTask.cancel();
+    video.removeAttribute("src");
+    video.load();
+  };
+
+  const promise = imageTask.promise.catch(
+    (imageError) =>
+      new Promise<MapMedia>((resolve, reject) => {
+        if (isCancelled) {
+          reject(imageError);
+          return;
+        }
+        video.muted = true;
+        video.loop = true;
+        video.playsInline = true;
+        video.addEventListener("loadeddata", () => {
+          video.play().catch(console.error);
+          resolve(video);
+        });
+        video.addEventListener("error", () => reject(video.error));
+        video.src = src;
+      })
+  );
+
+  return { promise: promise as Promise<MapMedia>, cancel };
+};
+
 /**
  * calculate the optimal dimensions for an area while kepping the aspect ratio
  * @param {number} idealWidth

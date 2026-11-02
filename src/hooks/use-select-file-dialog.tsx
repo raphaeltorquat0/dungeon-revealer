@@ -4,7 +4,8 @@ type ShowFileDialogFunction = () => void;
 type OnSelectFileFunction = (file: File) => void;
 
 export const useSelectFileDialog = (
-  onSelect: OnSelectFileFunction
+  onSelect: OnSelectFileFunction,
+  accept = ".jpeg,.jpg,.svg,.png"
 ): [React.ReactNode, ShowFileDialogFunction] => {
   const ref = React.useRef<HTMLInputElement>(null);
 
@@ -24,13 +25,13 @@ export const useSelectFileDialog = (
     () => (
       <input
         type="file"
-        accept=".jpeg,.jpg,.svg,.png"
+        accept={accept}
         ref={ref}
         onChange={onChange}
         style={{ display: "none" }}
       />
     ),
-    [onChange]
+    [onChange, accept]
   );
 
   const showFileDialog = React.useCallback(() => {

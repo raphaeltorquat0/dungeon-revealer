@@ -32,7 +32,10 @@ const CreateNewMapButton = ({
   children,
   ...props
 }: CreateNewMapButtonProps) => {
-  const [reactTreeNode, showFileDialog] = useSelectFileDialog(onSelectFile);
+  const [reactTreeNode, showFileDialog] = useSelectFileDialog(
+    onSelectFile,
+    ".jpeg,.jpg,.svg,.png,.webm,.mp4,.m4v,.mov"
+  );
   return (
     <>
       <Button.Primary {...props} onClick={showFileDialog}>
@@ -200,6 +203,20 @@ const SelectMapModal_ActiveMap_MapFragment = graphql`
   }
 `;
 
+const MapPreview = (props: { url: string }): React.ReactElement => {
+  const [isVideo, setIsVideo] = React.useState(false);
+
+  return isVideo ? (
+    <video src={props.url} muted autoPlay loop style={{ width: "100%" }} />
+  ) : (
+    <img
+      src={props.url}
+      style={{ width: "100%" }}
+      onError={() => setIsVideo(true)}
+    />
+  );
+};
+
 const ActiveMap = (props: {
   activeMap: selectMapModal_ActiveMap_MapFragment$key;
   setModalState: React.Dispatch<React.SetStateAction<ModalStates | null>>;
@@ -252,7 +269,7 @@ const ActiveMap = (props: {
           overflowY: "scroll",
         }}
       >
-        <img src={activeMap.mapImageUrl} style={{ width: "100%" }} />
+        <MapPreview key={activeMap.id} url={activeMap.mapImageUrl} />
       </div>
       <div
         style={{

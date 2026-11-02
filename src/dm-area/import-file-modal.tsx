@@ -45,7 +45,14 @@ const extractDefaultTitleFromFileName = (fileName: string) => {
   return parts.join(".");
 };
 
-const validImageFileTypes = ["image/png", "image/jpeg"];
+const validImageFileTypes = [
+  "image/png",
+  "image/jpeg",
+  "video/webm",
+  "video/mp4",
+  "video/x-m4v",
+  "video/quicktime",
+];
 const validNoteImportFileTypes = ["application/zip", "text/markdown"];
 
 const ImportFileModal_MapImageRequestUploadMutation = graphql`
@@ -184,7 +191,13 @@ const ImageImportModal: React.FC<{
           <h3>Import Image</h3>
         </Modal.Header>
         <Modal.Body>
-          {objectUrl ? <PreviewImage src={objectUrl} /> : null}
+          {objectUrl ? (
+            file.type.startsWith("video/") ? (
+              <PreviewImage as="video" src={objectUrl} />
+            ) : (
+              <PreviewImage src={objectUrl} />
+            )
+          ) : null}
           <FileTitle>{fileTitleWithoutExtension}</FileTitle>
         </Modal.Body>
         <Modal.Footer>

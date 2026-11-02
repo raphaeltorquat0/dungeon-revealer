@@ -15,7 +15,13 @@ import { useGesture } from "react-use-gesture";
 import styled from "@emotion/styled/macro";
 import { darken, lighten } from "polished";
 import debounce from "lodash/debounce";
-import { getOptimalDimensions, loadImage } from "./util";
+import {
+  getMapMediaSize,
+  getOptimalDimensions,
+  loadImage,
+  loadMapMedia,
+  MapMedia,
+} from "./util";
 import { useStaticRef } from "./hooks/use-static-ref";
 import { buildUrl } from "./public-url";
 import { CanvasText, CanvasTextRef } from "./canvas-text";
@@ -1263,7 +1269,7 @@ const FogRenderer = React.memo(
 
 const MapRenderer = (props: {
   map: mapView_MapRendererFragment$key;
-  mapImage: HTMLImageElement;
+  mapImage: MapMedia;
   mapImageTexture: THREE.Texture;
   fogTexture: THREE.Texture;
   viewport: ViewportData;
@@ -1292,8 +1298,8 @@ const MapRenderer = (props: {
             grid={map.grid}
             dimensions={props.dimensions}
             factor={props.factor}
-            imageHeight={props.mapImage.naturalHeight}
-            imageWidth={props.mapImage.naturalWidth}
+            imageHeight={getMapMediaSize(props.mapImage).height}
+            imageWidth={getMapMediaSize(props.mapImage).width}
           />
         ) : null}
         <FogRenderer
@@ -1331,7 +1337,7 @@ const MapViewRendererFragment = graphql`
 
 const MapViewRenderer = (props: {
   map: mapView_MapViewRendererFragment$key;
-  mapImage: HTMLImageElement;
+  mapImage: MapMedia;
   fogImage: HTMLImageElement | null;
   controlRef?: React.MutableRefObject<MapControlInterface | null>;
   activeTool: MapTool | null;
@@ -1352,15 +1358,20 @@ const MapViewRenderer = (props: {
     return Math.sqrt(maximumTextureSize * 1024);
   }, [maximumTextureSize]);
 
+  const mapImageSize = React.useMemo(
+    () => getMapMediaSize(props.mapImage),
+    [props.mapImage]
+  );
+
   const optimalDimensions = React.useMemo(
     () =>
       getOptimalDimensions(
-        props.mapImage.naturalWidth,
-        props.mapImage.naturalHeight,
+        mapImageSize.width,
+        mapImageSize.height,
         maximumSideLength,
         maximumSideLength
       ),
-    [maximumSideLength, props.mapImage]
+    [maximumSideLength, mapImageSize]
   );
 
   const [mapCanvas] = React.useState(() => {
@@ -1376,7 +1387,11 @@ const MapViewRenderer = (props: {
     return canvas;
   });
 
-  const [mapTexture] = React.useState(() => new THREE.CanvasTexture(mapCanvas));
+  const [mapTexture] = React.useState(() =>
+    props.mapImage instanceof HTMLVideoElement
+      ? new THREE.VideoTexture(props.mapImage)
+      : new THREE.CanvasTexture(mapCanvas)
+  );
   const [fogTexture] = React.useState(() => new THREE.CanvasTexture(fogCanvas));
 
   React.useEffect(() => {
@@ -1416,12 +1431,12 @@ const MapViewRenderer = (props: {
 
   const dimensions = React.useMemo(() => {
     return getOptimalDimensions(
-      props.mapImage.naturalWidth,
-      props.mapImage.naturalHeight,
+      mapImageSize.width,
+      mapImageSize.height,
       viewport.width * 0.95,
       viewport.height * 0.95
     );
-  }, [props.mapImage, viewport]);
+  }, [mapImageSize, viewport]);
 
   const isDragAllowed = React.useRef(true);
 
@@ -1634,7 +1649,7 @@ const MapViewRenderer = (props: {
           scale={spring.scale}
           dimensions={dimensions}
           factor={
-            dimensions.width / props.mapImage.width / optimalDimensions.ratio
+            dimensions.width / mapImageSize.width / optimalDimensions.ratio
           }
           fogOpacity={props.fogOpacity}
         />
@@ -1678,7 +1693,7 @@ export const MapView = (props: {
 
   const map = useFragment(MapFragment, props.map);
 
-  const [mapImage, setMapImage] = useResetState<HTMLImageElement | null>(null, [
+  const [mapImage, setMapImage] = useResetState<MapMedia | null>(null, [
     map.id,
   ]);
   const [fogImage, setFogImage] = useResetState<HTMLImageElement | null>(null, [
@@ -1691,7 +1706,7 @@ export const MapView = (props: {
   const isDungeonMaster = React.useContext(IsDungeonMasterContext);
 
   React.useEffect(() => {
-    const mapImageTask = loadImage(map.mapImageUrl);
+    const mapImageTask = loadMapMedia(map.mapImageUrl);
 
     cleanupMapImage.current = () => {
       mapImageTask.cancel();
