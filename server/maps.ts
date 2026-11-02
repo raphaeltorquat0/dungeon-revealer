@@ -148,37 +148,39 @@ export class Maps {
       .map((id) => this._buildMapFolderPath(id))
       .filter(isDirectory);
 
-    return mapDirectories.map((directory) => {
-      const rawConfig = fs.readFileSync(
-        path.join(directory, "settings.json"),
-        "utf-8"
-      );
-      const rawMap = JSON.parse(rawConfig) as LegacyMapEntity | MapEntity;
-      const map: MapEntity = {
-        id: rawMap.id,
-        title: rawMap.title,
-        mapPath: rawMap.mapPath,
-        fogProgressPath: rawMap.fogProgressPath ?? null,
-        fogLivePath: rawMap.fogLivePath ?? null,
-        showGrid: rawMap.showGrid ?? false,
-        showGridToPlayers: rawMap.showGridToPlayers ?? false,
-        grid: prepareGrid(
-          rawMap.grid,
-          "gridColor" in rawMap ? rawMap.gridColor : null
-        ),
-        tokens: "tokens" in rawMap ? rawMap.tokens.map(prepareToken) : [],
-        fogProgressRevision:
-          "fogProgressRevision" in rawMap
-            ? rawMap.fogProgressRevision
-            : randomUUID(),
-        fogLiveRevision:
-          "fogLiveRevision" in rawMap
-            ? rawMap.fogProgressRevision
-            : randomUUID(),
-      };
+    return mapDirectories
+      .map((directory) => {
+        const rawConfig = fs.readFileSync(
+          path.join(directory, "settings.json"),
+          "utf-8"
+        );
+        const rawMap = JSON.parse(rawConfig) as LegacyMapEntity | MapEntity;
+        const map: MapEntity = {
+          id: rawMap.id,
+          title: rawMap.title,
+          mapPath: rawMap.mapPath,
+          fogProgressPath: rawMap.fogProgressPath ?? null,
+          fogLivePath: rawMap.fogLivePath ?? null,
+          showGrid: rawMap.showGrid ?? false,
+          showGridToPlayers: rawMap.showGridToPlayers ?? false,
+          grid: prepareGrid(
+            rawMap.grid,
+            "gridColor" in rawMap ? rawMap.gridColor : null
+          ),
+          tokens: "tokens" in rawMap ? rawMap.tokens.map(prepareToken) : [],
+          fogProgressRevision:
+            "fogProgressRevision" in rawMap
+              ? rawMap.fogProgressRevision
+              : randomUUID(),
+          fogLiveRevision:
+            "fogLiveRevision" in rawMap
+              ? rawMap.fogProgressRevision
+              : randomUUID(),
+        };
 
-      return map;
-    });
+        return map;
+      })
+      .sort((a, b) => a.title.localeCompare(b.title));
   }
 
   getBasePath(map: { id: string }) {
