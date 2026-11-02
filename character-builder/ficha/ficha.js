@@ -139,6 +139,7 @@
 
   // ---------------------------------------------------------------- estado e rotas
   const state = {
+    sub: 0,
     view: "list",
     c: null,
     sample: false,
@@ -150,7 +151,7 @@
   };
 
   const route = () => {
-    const [kind, id, step] = window.location.hash
+    const [kind, id, step, sub] = window.location.hash
       .replace(/^#\/?/, "")
       .split("/");
     state.ui.levelup = null;
@@ -167,6 +168,7 @@
         );
       state.view = kind === "ficha" ? "sheet" : "builder";
       state.step = Math.max(0, Math.min(STEPS.length - 1, Number(step) || 0));
+      state.sub = Math.max(0, Number(sub) || 0);
     } else {
       state.view = "list";
       state.c = null;
@@ -217,6 +219,11 @@
       }
     }
     window.scrollTo(0, y);
+    // mantém a etapa e o passo atuais visíveis nas trilhas que rolam de lado
+    document.querySelectorAll(".subnav .on, .stepper .stp.on").forEach((el) => {
+      const bar = el.parentElement;
+      bar.scrollLeft = el.offsetLeft - (bar.clientWidth - el.offsetWidth) / 2;
+    });
   };
 
   // ---------------------------------------------------------------- personagem de exemplo
@@ -1179,15 +1186,17 @@
   };
 
   // ---------------------------------------------------------------- decisões (builder e subir de nível)
-  const decisionHTML = (d) => {
+  const decisionHTML = (d, bare) => {
     const done = R.isDecisionDone(d);
-    const head = `<h3><span class="st ${done ? "ok" : ""}"></span>${esc(
-      d.title
-    )} <span class="sub" style="text-transform:none;letter-spacing:0">${esc(
-      d.source.name
-    )}</span></h3>${
-      d.hint ? `<div class="rules" style="padding:0">${d.hint}</div>` : ""
-    }`;
+    const head = bare
+      ? ""
+      : `<h3><span class="st ${done ? "ok" : ""}"></span>${esc(
+          d.title
+        )} <span class="sub" style="text-transform:none;letter-spacing:0">${esc(
+          d.source.name
+        )}</span></h3>${
+          d.hint ? `<div class="rules" style="padding:0">${d.hint}</div>` : ""
+        }`;
     if (d.kind === "pick") {
       const limit = Math.min(d.count, d.options.length);
       const count = `<div class="sub" style="margin:2px 0 8px">${
@@ -1589,165 +1598,496 @@
       })
       .join("");
 
+  // ------------------------------------------------------------ builder passo a passo
+  // Cada passo vira uma sequência de telas curtas; cada tela explica a escolha que pede.
+  const ABILITY_USE = {
+    str: "ataques corpo a corpo, Atletismo e carregar peso",
+    dex: "Classe de Armadura, iniciativa e armas de acuidade ou à distância",
+    con: "Pontos de Vida e manter a Concentração em magias",
+    int: "magia de Mago, Arcanismo, História e Investigação",
+    wis: "Percepção, Intuição e magia de Clérigo, Druida e Patrulheiro",
+    cha: "Persuasão, Enganação e magia de Bardo, Bruxo, Feiticeiro e Paladino",
+  };
+
+  const explainDecision = (d) => {
+    const first = (d.options && d.options[0]) || "";
+    const docOf = d.optionKind === "doc" && doc(first);
+    if (d.kind === "asi" && d.background)
+      return {
+        what: "O antecedente melhora três atributos: +2 em um e +1 em outro, ou +1 em cada um dos três.",
+        how: "Ponha o +2 no atributo principal da sua classe. Nenhum valor passa de 20.",
+        tip: "Os números ao lado de cada atributo já mostram o valor com os bônus.",
+      };
+    if (d.kind === "asi")
+      return {
+        what: "Neste nível você melhora atributos (+2 em um ou +1 em dois) ou troca esse aumento por um talento.",
+        how: "Levar o atributo principal a um número par aumenta o modificador. Um talento traz uma capacidade nova.",
+        tip: "Abra cada talento no + para ler a regra antes de trocar.",
+      };
+    if (d.kind === "subclass")
+      return {
+        what: "A subclasse especializa sua classe: dá características próprias agora e em níveis futuros.",
+        how: "Abra a opção no + para ler o que ela concede em cada nível.",
+        tip: "O SRD traz uma subclasse por classe; o mestre pode liberar outras.",
+      };
+    if (d.kind === "size")
+      return {
+        what: "Sua espécie pode ser de mais de um tamanho.",
+        how: "Escolha pela aparência que imagina. O deslocamento não muda.",
+      };
+    if (d.mode === "expertise")
+      return {
+        what: "Especialização dobra o Bônus de Proficiência numa perícia que você já domina.",
+        how: "Escolha a perícia que você mais vai usar nas cenas em que quer brilhar.",
+      };
+    if (d.mode === "mastery")
+      return {
+        what: "Maestria em Armas libera o efeito especial de uma arma, como derrubar, empurrar ou atrasar o alvo.",
+        how: "Escolha armas que você vai empunhar de verdade. A troca é feita depois de um Descanso Longo.",
+      };
+    if (first.startsWith("skills:"))
+      return {
+        what: "Perícias são áreas em que o personagem é treinado. Nos testes delas você soma o Bônus de Proficiência.",
+        how: "Prefira perícias ligadas aos seus atributos mais altos e ao papel que quer no grupo. As que você já tem por outra origem não aparecem aqui.",
+        tip: "Percepção é útil para qualquer personagem.",
+      };
+    if (first.startsWith("languages:"))
+      return {
+        what: "Idiomas que o personagem fala, lê e escreve. Todos já começam com o Comum.",
+        how: "Pense na história: quem cresceu perto de elfos fala Élfico; quem negociou com anões fala Anão.",
+      };
+    if (first.startsWith("tool:"))
+      return {
+        what: "Com ferramentas em que tem proficiência, você soma o Bônus de Proficiência ao usá-las.",
+        how: "Escolha uma que combine com o passado do personagem.",
+      };
+    if (first.startsWith("weapon:") || first.startsWith("armor:"))
+      return {
+        what: "Armas ou armaduras em que você passa a ter treinamento.",
+        how: "Escolha as que combinam com seu estilo de luta.",
+      };
+    if (docOf && docOf.type === "spell")
+      return {
+        what: "Magias concedidas por esta característica, além das magias da sua classe.",
+        how: "Use o filtro de círculo e a busca. Toque no + para ler a magia inteira.",
+      };
+    const sub = docOf && docOf.featType && docOf.featType.subtype;
+    if (sub === "origin")
+      return {
+        what: "Um talento de origem: um benefício de começo de jornada, como iniciativa melhor ou perícias extras.",
+        how: "Abra cada um no + e escolha o que mais combina com seu plano.",
+      };
+    if (sub === "lineage")
+      return {
+        what: "A linhagem detalha sua espécie e acrescenta traços, às vezes magias inatas.",
+        how: "Abra cada opção no + para ver o que ela concede.",
+      };
+    if (sub === "fightingStyle")
+      return {
+        what: "Um Estilo de Luta: um bônus permanente para a forma como você combate.",
+        how: "Escolha pelo tipo de arma que vai usar: duas mãos, arco, escudo, uma arma em cada mão.",
+      };
+    if (sub === "eldritchInvocation")
+      return {
+        what: "Invocações Místicas são poderes concedidos pelo seu pacto.",
+        how: "Algumas têm pré-requisito de nível ou de truque; leia no +.",
+      };
+    if (sub === "metamagic")
+      return {
+        what: "Metamagia permite moldar suas magias, gastando Pontos de Feitiçaria.",
+        how: "Escolha opções que combinam com as magias que você mais conjura.",
+      };
+    return {
+      what: "Esta característica tem variações. Escolha a que preferir.",
+      how: "Toque no + de cada opção para ler a regra completa.",
+    };
+  };
+
+  const helpPanel = (h, rule) => `<aside class="frame help sticky">
+      <div class="title">${icon("book", 15)}Sobre esta escolha</div>
+      ${h.what ? `<p class="lead">${h.what}</p>` : ""}
+      ${
+        h.how
+          ? `<div class="hsec"><div class="hk">Como escolher</div><p>${h.how}</p></div>`
+          : ""
+      }
+      ${
+        h.list
+          ? `<div class="hsec"><div class="hk">Para que serve cada atributo</div>${h.list}</div>`
+          : ""
+      }
+      ${
+        h.tip
+          ? `<div class="hsec tip">${icon("star", 14)}<p>${h.tip}</p></div>`
+          : ""
+      }
+      ${
+        rule
+          ? `<div class="hsec"><div class="hk">Regra</div><div class="rules" style="padding:0">${rule}</div></div>`
+          : ""
+      }
+    </aside>`;
+
+  const docsOf = (type) =>
+    Object.values(SRD.docs)
+      .filter((d) => d.type === type && d.pack !== "equipment24")
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+
+  const speciesKv = (d) => [
+    ["Desloc.", m((d.movement && d.movement.walk) || 30)],
+    ["Visão", d.senses && d.senses.darkvision ? m(d.senses.darkvision) : "—"],
+    [
+      "Tamanho",
+      (
+        (d.advancement || []).find((x) => x.type === "Size") || {
+          config: { sizes: ["med"] },
+        }
+      ).config.sizes
+        .map((z) => R.SIZE_LABEL[z])
+        .join(" ou "),
+    ],
+  ];
+  const backgroundKv = (d) => {
+    const skills = (d.advancement || []).flatMap((a) =>
+      a.type === "Trait"
+        ? (a.config.grants || [])
+            .filter((g) => g.startsWith("skills:"))
+            .map((g) => R.traitLabel(SRD, g))
+        : []
+    );
+    const feat = (d.advancement || [])
+      .flatMap((a) => (a.type === "ItemGrant" ? a.config.items || [] : []))
+      .map((id) => doc(id) && doc(id).name)[0];
+    return [
+      ["Perícias", skills.join(", ")],
+      ["Talento", feat],
+    ];
+  };
+  const classKv = (d) => [
+    ["Dado de Vida", d.hitDie],
+    [
+      "Principal",
+      ((d.primaryAbility && d.primaryAbility.value) || [])
+        .map((k) => R.ABILITY_SHORT[k])
+        .join(d.primaryAbility && d.primaryAbility.all ? " e " : " ou "),
+    ],
+    ["Papel", (R.CLASS_LORE[d.identifier] || {}).role],
+  ];
+
+  const decisionPage = (d) => ({
+    id: d.key,
+    title: d.title,
+    done: R.isDecisionDone(d),
+    body: decisionHTML(d, true),
+    help: explainDecision(d),
+    rule: d.hint,
+    note: d.source && d.source.name,
+  });
+
+  const spellPage = (c, l, field) => {
+    const pool =
+      field === "known"
+        ? l.list.filter((id) => doc(id).level === 0)
+        : l.list.filter(
+            (id) => doc(id).level >= 1 && doc(id).level <= l.maxLevel
+          );
+    const chosen = c.spells[field].filter((id) => pool.includes(id));
+    const limit = field === "known" ? l.cantrips : l.prepared;
+    const key = (field === "known" ? "truques-" : "preparadas-") + l.classId;
+    return {
+      id: key,
+      title: field === "known" ? "Truques" : "Magias preparadas",
+      done: chosen.length >= Math.min(limit, pool.length),
+      note: doc(l.classId).name,
+      body: `<div class="frame decision"><div class="sub" style="margin:0 0 8px">Escolha ${limit}: <b style="color:var(--text)">${
+        chosen.length
+      } de ${limit}</b>${
+        field === "prepared" ? `, até o ${l.maxLevel}º círculo` : ""
+      }.</div>${docOptions(
+        key,
+        pool,
+        chosen,
+        "spell",
+        `data-field="${field}" data-limit="${limit}"`
+      )}</div>`,
+      help:
+        field === "known"
+          ? {
+              what: "Truques são magias que você conjura à vontade, sem gastar espaços de magia.",
+              how: "Tenha ao menos um truque que causa dano e um utilitário, como Luz ou Mão Mágica.",
+              tip: `Seu atributo de conjuração é ${
+                R.ABILITY_LABEL[l.ability]
+              }.`,
+            }
+          : {
+              what: "Magias preparadas são as que você pode conjurar, gastando um espaço de magia do círculo certo.",
+              how: "Equilibre proteção, cura e dano. Dá para trocar a lista depois, na aba Magias da ficha.",
+              tip: `Você prepara ${limit} magias, até o ${l.maxLevel}º círculo.`,
+            },
+    };
+  };
+
+  const pagesFor = (stepId, c) => {
+    const ch = c.equipmentChoice || {};
+    const t = eqTrees(c);
+    const decs = (root) =>
+      R.decisions(SRD, c)
+        .filter((d) => d.root === root)
+        .sort((a, b) => Math.max(1, a.advLevel) - Math.max(1, b.advLevel))
+        .map((d) => {
+          const p = decisionPage(d);
+          if (root === "class" && c.classes[0] && c.classes[0].level > 1)
+            p.note = `Nível ${Math.max(1, d.advLevel)} · ${p.note}`;
+          return p;
+        });
+    if (stepId === "inicio")
+      return [
+        {
+          id: "nome",
+          title: "Nome e jogador",
+          done: c.name.trim().length > 0,
+          body: `<div class="frame">
+            <label class="lbl" for="b-name">Nome do personagem</label><input class="field" id="b-name" data-bind="name" autocomplete="off" placeholder="Ex.: Elowen Ventoalto" value="${esc(
+              c.name
+            )}">
+            <label class="lbl" for="b-player">Jogador</label><input class="field" id="b-player" data-bind="player" value="${esc(
+              c.player || ""
+            )}">
+            <label class="lbl" for="b-al">Alinhamento</label><input class="field" id="b-al" data-bind="details.alignment" placeholder="Ex.: Neutro e Bom" value="${esc(
+              c.details.alignment || ""
+            )}"></div>`,
+          help: {
+            what: "Comece pelo nome. Ele aparece no topo da ficha e na lista de fichas da mesa.",
+            how: "Ainda sem nome? Use um provisório; dá para trocar depois em Gerenciar.",
+            tip: "O nome do jogador ajuda o mestre a saber de quem é cada ficha.",
+          },
+        },
+        {
+          id: "retrato",
+          title: "Retrato",
+          done: true,
+          optional: true,
+          body: `<div class="frame" style="text-align:center">
+            <div style="display:grid;place-items:center;margin:10px 0 22px">${portrait(
+              c
+            )}</div>
+            <label class="btn" for="portrait-file">${icon(
+              "user",
+              15
+            )}Escolher imagem</label>
+            <input id="portrait-file" type="file" accept="image/*" style="display:none">
+            ${
+              c.portrait
+                ? `<button class="btn ghost" data-act="no-portrait">Remover</button>`
+                : ""
+            }</div>`,
+          help: {
+            what: "Uma imagem para reconhecer o personagem na lista e no cabeçalho da ficha.",
+            how: "Opcional. Qualquer foto ou ilustração serve: ela é cortada em quadrado e reduzida.",
+            tip: "Sem imagem, a ficha mostra o emblema da classe.",
+          },
+        },
+      ];
+    if (stepId === "especie") {
+      const sel = c.speciesId;
+      return [
+        {
+          id: "escolha",
+          title: "Escolha a espécie",
+          done: Boolean(sel),
+          body: `<div class="pick">${docsOf("race")
+            .map((d) =>
+              optCard(
+                d,
+                d.id === sel,
+                "setspecies",
+                R.SPECIES_LORE[d.identifier],
+                speciesKv(d)
+              )
+            )
+            .join("")}</div>${
+            sel
+              ? `<div style="margin-top:14px">${detailPanel(doc(sel))}</div>`
+              : ""
+          }`,
+          help: {
+            what: "A espécie é a origem do personagem: define tamanho, deslocamento e traços inatos, como visão no escuro ou resistências.",
+            how: "Toque numa espécie para ver os traços logo abaixo. Nas regras de 2024 a espécie não muda atributos: isso vem do antecedente.",
+            tip: "Em dúvida? Humano é versátil e ganha um talento de origem a mais.",
+          },
+        },
+        ...(sel ? decs("species") : []),
+      ];
+    }
+    if (stepId === "classe") {
+      const sel = c.classes[0] && c.classes[0].classId;
+      const lvl = c.classes[0] ? c.classes[0].level : 1;
+      return [
+        {
+          id: "escolha",
+          title: "Escolha a classe",
+          done: Boolean(sel),
+          body: `<div class="pick">${docsOf("class")
+            .map((d) =>
+              optCard(
+                d,
+                d.id === sel,
+                "setclass",
+                (R.CLASS_LORE[d.identifier] || {}).tagline,
+                classKv(d)
+              )
+            )
+            .join("")}</div>${
+            sel
+              ? `<div style="margin-top:14px">${detailPanel(doc(sel))}</div>`
+              : ""
+          }`,
+          help: {
+            what: "A classe é a profissão aventureira: decide como o personagem luta, que magia usa e o que ganha a cada nível.",
+            how: "Compare o Dado de Vida (quanto aguenta), o atributo principal e o papel no grupo. Ao escolher, o quadro abaixo mostra o que vem no 1º nível.",
+            tip: "Primeira vez jogando? Guerreiro, Bárbaro e Clérigo são diretos.",
+          },
+        },
+        ...(sel
+          ? [
+              {
+                id: "nivel",
+                title: "Nível inicial",
+                done: true,
+                body: `<div class="frame levelpick">
+                  <button class="btn" data-act="startlvl" data-d="-1" aria-label="Diminuir nível">−</button>
+                  <div><div class="big">${lvl}</div><div class="sub">nível de ${esc(
+                  doc(sel).name
+                )}</div></div>
+                  <button class="btn" data-act="startlvl" data-d="1" aria-label="Aumentar nível">+</button></div>`,
+                help: {
+                  what: "Em que nível o personagem começa. A maioria das campanhas começa no 1º.",
+                  how: "Combine com o mestre. Acima do 1º, cada escolha extra (subclasse, aumentos, magias) vira uma etapa a seguir, e os PV usam a média do dado.",
+                },
+              },
+              ...decs("class"),
+              ...R.spellLimits(SRD, c).flatMap((l) =>
+                [
+                  l.cantrips ? spellPage(c, l, "known") : null,
+                  l.prepared ? spellPage(c, l, "prepared") : null,
+                ].filter(Boolean)
+              ),
+            ]
+          : []),
+      ];
+    }
+    if (stepId === "antecedente") {
+      const sel = c.backgroundId;
+      return [
+        {
+          id: "escolha",
+          title: "Escolha o antecedente",
+          done: Boolean(sel),
+          body: `<div class="pick">${docsOf("background")
+            .map((d) =>
+              optCard(
+                d,
+                d.id === sel,
+                "setbg",
+                R.BACKGROUND_LORE[d.identifier],
+                backgroundKv(d)
+              )
+            )
+            .join("")}</div>${
+            sel
+              ? `<div style="margin-top:14px">${detailPanel(doc(sel))}</div>`
+              : ""
+          }`,
+          help: {
+            what: "O antecedente é o que o personagem fazia antes da aventura. Ele dá aumentos de atributo, duas perícias, uma ferramenta e um talento de origem.",
+            how: "Escolha pela história que você imagina ou pelos atributos que ele melhora.",
+          },
+        },
+        ...(sel ? decs("background") : []),
+      ];
+    }
+    if (stepId === "atributos")
+      return [
+        {
+          id: "metodo",
+          title: "Como gerar os valores",
+          done: true,
+          body: abilitiesStep(c, "method"),
+          help: {
+            what: "Os seis atributos medem força, agilidade, vigor, intelecto, percepção e presença.",
+            how: "Conjunto padrão: 15, 14, 13, 12, 10 e 8, equilibrado e rápido. Compra de pontos: 27 pontos para montar do seu jeito. Rolar 4d6: soma os três maiores de quatro dados, mais arriscado. Digitar: valores que o mestre aprovou.",
+            tip: "Na dúvida, fique com o conjunto padrão: o builder já distribui pela sua classe.",
+          },
+        },
+        {
+          id: "distribuir",
+          title: "Distribua os valores",
+          done: abilitiesValid(c),
+          body: abilitiesStep(c, "assign"),
+          help: {
+            what: "Coloque os maiores valores no atributo principal da classe e em Constituição, que dá Pontos de Vida.",
+            list: `<ul class="hlist">${R.ABILITIES.map(
+              (k) => `<li><b>${R.ABILITY_SHORT[k]}</b> ${ABILITY_USE[k]}</li>`
+            ).join("")}</ul>`,
+          },
+        },
+      ];
+    if (stepId === "equipamento") {
+      const kit = (label, d, roots) => ({
+        id: label,
+        title:
+          label === "classe"
+            ? "Equipamento da classe"
+            : "Equipamento do antecedente",
+        done: Boolean(d) && R.pendingEquipment(SRD, roots, ch).length === 0,
+        note: d && d.name,
+        body: d
+          ? `<div class="frame">${roots
+              .map((n) => eqNode(n, ch))
+              .join("")}</div>`
+          : `<p class="muted">Escolha ${
+              label === "classe" ? "a classe" : "o antecedente"
+            } antes.</p>`,
+        help: {
+          what: "O equipamento inicial. A opção A é um kit pronto; a opção B troca o kit por ouro.",
+          how: "Com A você começa a jogar na hora. Com B você compra item por item depois, na aba Equipamento da ficha.",
+          tip: "Itens marcados como 'Falta escolher' pedem uma escolha dentro do kit.",
+        },
+      });
+      return [
+        kit("classe", c.classes[0] && doc(c.classes[0].classId), t.cls),
+        kit("antecedente", c.backgroundId && doc(c.backgroundId), t.bg),
+      ];
+    }
+    return [
+      {
+        id: "revisao",
+        title: "Revisão final",
+        done: STEPS.slice(0, -1).every((x) => x.done(c)),
+        body: reviewStep(c),
+        help: {
+          what: "Confira os números calculados antes de concluir.",
+          how: "Se algo estiver pendente, os botões no topo levam direto à etapa certa.",
+          tip: "Depois de concluir, tudo pode ser ajustado em Gerenciar.",
+        },
+      },
+    ];
+  };
+
   const builderView = () => {
     const c = state.c;
     const step = STEPS[state.step];
-    const docsOf = (type) =>
-      Object.values(SRD.docs)
-        .filter((d) => d.type === type && d.pack !== "equipment24")
-        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-    let body = "";
-    if (step.id === "inicio") {
-      body = `<div class="split"><div class="frame">
-          <label class="lbl" for="b-name">Nome do personagem</label><input class="field" id="b-name" data-bind="name" autocomplete="off" value="${esc(
-            c.name
-          )}">
-          <label class="lbl" for="b-player">Jogador</label><input class="field" id="b-player" data-bind="player" value="${esc(
-            c.player || ""
-          )}">
-          <label class="lbl" for="b-al">Alinhamento</label><input class="field" id="b-al" data-bind="details.alignment" placeholder="Ex.: Neutro e Bom" value="${esc(
-            c.details.alignment || ""
-          )}">
-        </div><div class="frame" style="text-align:center">
-          <div class="title">Retrato</div><div style="display:grid;place-items:center;margin:8px 0 18px">${portrait(
-            c
-          )}</div>
-          <label class="btn" for="portrait-file" style="display:inline-grid;place-items:center">Escolher imagem</label>
-          <input id="portrait-file" type="file" accept="image/*" style="display:none">
-          ${
-            c.portrait
-              ? `<button class="btn ghost" data-act="no-portrait">Remover</button>`
-              : ""
-          }
-          <p class="sub">A imagem é reduzida e fica salva na ficha.</p></div></div>`;
-    } else if (step.id === "especie" || step.id === "antecedente") {
-      const isSp = step.id === "especie";
-      const sel = isSp ? c.speciesId : c.backgroundId;
-      const items = docsOf(isSp ? "race" : "background");
-      const cards = items
-        .map((d) =>
-          optCard(
-            d,
-            d.id === sel,
-            isSp ? "setspecies" : "setbg",
-            isSp
-              ? R.SPECIES_LORE[d.identifier]
-              : R.BACKGROUND_LORE[d.identifier],
-            isSp
-              ? [
-                  ["Desloc.", m((d.movement && d.movement.walk) || 30)],
-                  [
-                    "Visão",
-                    d.senses && d.senses.darkvision
-                      ? m(d.senses.darkvision)
-                      : "—",
-                  ],
-                  [
-                    "Tamanho",
-                    (
-                      (d.advancement || []).find((x) => x.type === "Size") || {
-                        config: { sizes: ["med"] },
-                      }
-                    ).config.sizes
-                      .map((z) => R.SIZE_LABEL[z])
-                      .join(" ou "),
-                  ],
-                ]
-              : (() => {
-                  const skills = (d.advancement || []).flatMap((a) =>
-                    a.type === "Trait"
-                      ? (a.config.grants || [])
-                          .filter((g) => g.startsWith("skills:"))
-                          .map((g) => R.traitLabel(SRD, g))
-                      : []
-                  );
-                  const feat = (d.advancement || [])
-                    .flatMap((a) =>
-                      a.type === "ItemGrant" ? a.config.items || [] : []
-                    )
-                    .map((id) => doc(id) && doc(id).name)[0];
-                  return [
-                    ["Perícias", skills.join(", ")],
-                    ["Talento", feat],
-                  ];
-                })()
-          )
-        )
-        .join("");
-      body = `<p class="muted">${
-        isSp
-          ? "A espécie define tamanho, deslocamento e traços como visão no escuro ou resistências."
-          : "O antecedente dá aumentos de atributo, perícias, uma ferramenta e um talento de origem."
-      }</p>
-        <div class="${
-          sel ? "split" : ""
-        }"><div><div class="pick">${cards}</div>${
-        sel ? decisionsFor(isSp ? "species" : "background") : ""
-      }</div>${sel ? detailPanel(doc(sel)) : ""}</div>`;
-    } else if (step.id === "classe") {
-      const sel = c.classes[0] && c.classes[0].classId;
-      const cards = docsOf("class")
-        .map((d) =>
-          optCard(
-            d,
-            d.id === sel,
-            "setclass",
-            (R.CLASS_LORE[d.identifier] || {}).tagline,
-            [
-              ["Dado de Vida", d.hitDie],
-              [
-                "Principal",
-                ((d.primaryAbility && d.primaryAbility.value) || [])
-                  .map((k) => R.ABILITY_SHORT[k])
-                  .join(
-                    d.primaryAbility && d.primaryAbility.all ? " e " : " ou "
-                  ),
-              ],
-              ["Papel", (R.CLASS_LORE[d.identifier] || {}).role],
-            ]
-          )
-        )
-        .join("");
-      const lvl = c.classes[0] ? c.classes[0].level : 1;
-      body = `${
-        sel
-          ? `<div class="frame" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:12px">
-            <span style="flex:1 1 220px"><span style="font-size:15px;font-weight:800">Nível inicial</span><span class="sub" style="display:block">Comece no nível que a campanha pede; as escolhas de cada nível aparecem abaixo.</span></span>
-            <button class="btn" data-act="startlvl" data-d="-1" aria-label="Diminuir nível">−</button><b style="font-size:26px;min-width:36px;text-align:center">${lvl}</b><button class="btn" data-act="startlvl" data-d="1" aria-label="Aumentar nível">+</button></div>`
-          : ""
-      }
-        <div class="${
-          sel ? "split" : ""
-        }"><div><div class="pick">${cards}</div>${
-        sel ? decisionsFor("class", true) + spellPicker(c) : ""
-      }</div>${sel ? detailPanel(doc(sel)) : ""}</div>`;
-    } else if (step.id === "atributos") {
-      body = abilitiesStep(c);
-    } else if (step.id === "equipamento") {
-      const t = eqTrees(c);
-      const ch = c.equipmentChoice || {};
-      const panel = (title, d, roots) =>
-        `<div class="frame"><div class="title">${title}${
-          d ? ` <span class="right sub">${esc(d.name)}</span>` : ""
-        }</div>${
-          d
-            ? roots.map((n) => eqNode(n, ch)).join("")
-            : '<p class="muted">Escolha antes no passo correspondente.</p>'
-        }</div>`;
-      body = `<p class="muted">Fique com o kit (A) ou leve o valor em ouro (B) e compre o que quiser.</p>
-        <div class="split" style="grid-template-columns:1fr 1fr">${panel(
-          "Da classe",
-          c.classes[0] && doc(c.classes[0].classId),
-          t.cls
-        )}${panel(
-        "Do antecedente",
-        c.backgroundId && doc(c.backgroundId),
-        t.bg
-      )}</div>`;
-    } else {
-      body = reviewStep(c);
-    }
-    const last = state.step === STEPS.length - 1;
+    const pages = pagesFor(step.id, c);
+    const sub = Math.min(state.sub, pages.length - 1);
+    const page = pages[sub];
+    const lastStep = state.step === STEPS.length - 1;
+    const lastPage = sub === pages.length - 1;
+    const nextLabel = !lastPage
+      ? pages[sub + 1].title
+      : !lastStep
+      ? STEPS[state.step + 1].title
+      : "";
+    const doneSteps = STEPS.filter((x) => x.done(c)).length;
     return `<div class="wrap">
       <div class="bhead"><button class="btn ghost" data-act="home">${icon(
         "back",
@@ -1775,30 +2115,46 @@
         }</span></span>
         </button>`;
       }).join("")}<span class="rail"><div style="width:${Math.round(
-      (STEPS.filter((x) => x.done(c)).length / STEPS.length) * 100
+      (doneSteps / STEPS.length) * 100
     )}%"></div></span></nav>
-      <div class="progress-line"><b>${
-        STEPS.filter((x) => x.done(c)).length
-      } de ${STEPS.length}</b> passos concluídos</div>
-      <div class="step-title"><h2>${step.title}</h2><span class="sub">Passo ${
-      state.step + 1
-    } de ${STEPS.length}</span></div>
-      ${body}
-      <div class="nav"><button class="btn" data-act="step" data-i="${
-        state.step - 1
-      }" ${state.step === 0 ? "disabled" : ""}>${icon(
-      "back",
-      15
-    )}Anterior</button>
+      <div class="subnav" aria-label="Etapas de ${step.title}">${pages
+      .map(
+        (p, i) => `<button class="${i === sub ? "on" : ""} ${
+          p.done && !p.optional ? "done" : ""
+        }" data-act="page" data-p="${i}" aria-current="${
+          i === sub ? "step" : "false"
+        }">
+            <span class="d">${
+              p.done && !p.optional && i !== sub ? icon("check", 11) : i + 1
+            }</span>${esc(p.title)}</button>`
+      )
+      .join("")}</div>
+      <div class="step-title"><h2>${esc(page.title)}</h2><span class="sub">${
+      step.title
+    } · etapa ${sub + 1} de ${pages.length}${
+      page.note ? " · " + esc(page.note) : ""
+    }</span></div>
+      <div class="split">
+        <div>${page.body}</div>
+        ${helpPanel(page.help || {}, page.rule)}
+      </div>
+      <div class="nav">
+        <button class="btn" data-act="prev" ${
+          state.step === 0 && sub === 0 ? "disabled" : ""
+        }>${icon("back", 15)}Anterior</button>
+        <span class="sub navhint">${
+          page.done || page.optional ? "" : "Conclua esta escolha para avançar"
+        }</span>
         ${
-          last
+          lastStep && lastPage
             ? `<button class="btn red" data-act="finish" ${
                 STEPS.every((s) => s.done(c)) ? "" : "disabled"
               }>${icon("check", 15)}Concluir Ficha</button>`
-            : `<button class="btn red" data-act="step" data-i="${
-                state.step + 1
-              }">Próximo: ${STEPS[state.step + 1].title}</button>`
-        }</div>
+            : `<button class="btn red" data-act="next" ${
+                page.done || page.optional ? "" : "disabled"
+              }>Próximo: ${esc(nextLabel)}</button>`
+        }
+      </div>
     </div>`;
   };
 
@@ -1852,7 +2208,7 @@
       doc(c.classes[0].classId).primaryAbility.value) ||
     [];
 
-  const abilitiesStep = (c) => {
+  const abilitiesStep = (c, mode) => {
     const fin = R.abilityScores(SRD, c);
     const prim = primaryOf(c);
     const used = R.ABILITIES.map((k) => c.abilities[k]);
@@ -1861,11 +2217,54 @@
         ? R.STANDARD_ARRAY
         : [...used].sort((a, b) => b - a);
     const methods = [
-      ["standard", "Conjunto padrão"],
-      ["pointbuy", "Compra de pontos"],
-      ["roll", "Rolar 4d6"],
-      ["manual", "Digitar"],
+      [
+        "standard",
+        "Conjunto padrão",
+        "list",
+        "15, 14, 13, 12, 10 e 8. Rápido e equilibrado.",
+      ],
+      [
+        "pointbuy",
+        "Compra de pontos",
+        "plus",
+        "27 pontos para montar cada valor entre 8 e 15.",
+      ],
+      [
+        "roll",
+        "Rolar 4d6",
+        "d20",
+        "Soma os três maiores de quatro dados, seis vezes. Toque de novo para rolar outra vez.",
+      ],
+      ["manual", "Digitar", "scroll", "Valores combinados com o mestre."],
     ];
+    if (mode === "method")
+      return `<div class="pick">${methods
+        .map(
+          ([k, l, ic, desc]) =>
+            `<button class="opt ${
+              c.abilityMethod === k ? "on" : ""
+            }" data-act="method" data-m="${k}" aria-pressed="${
+              c.abilityMethod === k
+            }">
+              <span class="crest ${
+                c.abilityMethod === k ? "on" : ""
+              }" style="--s:50px;color:${
+              c.abilityMethod === k ? "#fff" : "var(--gold)"
+            }">${icon(ic, 24)}</span><span class="check">${icon(
+              "check",
+              12
+            )}</span>
+              <span style="min-width:0"><b>${l}</b><span class="tagline">${desc}</span></span></button>`
+        )
+        .join("")}</div>${
+        c.abilityMethod === "roll"
+          ? `<p class="sub" style="margin-top:12px">Valores rolados: <b style="color:var(--text)">${[
+              ...used,
+            ]
+              .sort((a, b) => b - a)
+              .join(", ")}</b></p>`
+          : ""
+      }`;
     return `<p class="muted">${
       prim.length
         ? `Atributo principal da classe: ${prim
@@ -1873,14 +2272,9 @@
             .join(" ou ")}. Coloque nele o valor mais alto.`
         : "Escolha a classe para ver o atributo principal."
     }</p>
-      <div>${methods
-        .map(
-          ([k, l]) =>
-            `<button class="chip ${
-              c.abilityMethod === k ? "on" : ""
-            }" data-act="method" data-m="${k}">${l}</button>`
-        )
-        .join("")}</div>
+      <p class="sub">Método: <b style="color:var(--text)">${
+        (methods.find((x) => x[0] === c.abilityMethod) || methods[0])[1]
+      }</b>. Para trocar, volte uma etapa.</p>
       ${
         c.abilityMethod === "pointbuy"
           ? `<p class="${
@@ -2364,7 +2758,36 @@
     step: (el) => {
       const i = Number(el.dataset.i);
       if (i < 0 || i >= STEPS.length) return;
-      go("/criar/" + state.c.id + "/" + i);
+      go("/criar/" + state.c.id + "/" + i + "/0");
+    },
+    page: (el) =>
+      go("/criar/" + state.c.id + "/" + state.step + "/" + el.dataset.p),
+    next: () => {
+      const pages = pagesFor(STEPS[state.step].id, state.c);
+      const sub = Math.min(state.sub, pages.length - 1);
+      if (sub + 1 < pages.length)
+        go("/criar/" + state.c.id + "/" + state.step + "/" + (sub + 1));
+      else if (state.step + 1 < STEPS.length)
+        go("/criar/" + state.c.id + "/" + (state.step + 1) + "/0");
+    },
+    prev: () => {
+      const sub = Math.min(
+        state.sub,
+        pagesFor(STEPS[state.step].id, state.c).length - 1
+      );
+      if (sub > 0)
+        go("/criar/" + state.c.id + "/" + state.step + "/" + (sub - 1));
+      else if (state.step > 0) {
+        const prevPages = pagesFor(STEPS[state.step - 1].id, state.c);
+        go(
+          "/criar/" +
+            state.c.id +
+            "/" +
+            (state.step - 1) +
+            "/" +
+            (prevPages.length - 1)
+        );
+      }
     },
     setspecies: (el) => {
       state.c.speciesId = el.dataset.id;

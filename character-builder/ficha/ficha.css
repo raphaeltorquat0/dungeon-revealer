@@ -1771,3 +1771,152 @@ body {
   overflow: visible;
   line-height: 1.25;
 }
+
+/* Builder passo a passo: trilha de etapas, painel de explicação, nível inicial */
+.subnav {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin: -6px 0 16px;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.subnav::-webkit-scrollbar {
+  display: none;
+}
+.subnav button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  flex: none;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 3px;
+  padding: 6px 11px 6px 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  transition: all 0.15s var(--ease);
+}
+.subnav button:hover {
+  color: var(--text);
+  border-color: var(--line-2);
+}
+.subnav button .d {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  font-size: 10.5px;
+  font-weight: 800;
+}
+.subnav button.done .d {
+  border-color: var(--ok);
+  color: var(--ok);
+  background: rgba(46, 204, 113, 0.08);
+}
+.subnav button.on {
+  color: #fff;
+  border-color: var(--accent);
+  background: linear-gradient(
+    180deg,
+    rgba(194, 58, 46, 0.22),
+    rgba(194, 58, 46, 0.06)
+  );
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.subnav button.on .d {
+  background: var(--accent);
+  border-color: var(--accent-2);
+  color: #fff;
+}
+
+.help {
+  font-size: 13.5px;
+}
+.help .lead {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  margin: 0 0 12px;
+}
+.help .hsec {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+.help .hk {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 4px;
+}
+.help p {
+  margin: 0;
+  color: #d6d2cb;
+  line-height: 1.55;
+}
+.help .tip {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: rgba(201, 161, 90, 0.07);
+  border: 1px solid rgba(201, 161, 90, 0.25);
+  border-radius: 3px;
+  padding: 9px 10px;
+}
+.help .tip .ico-s {
+  color: var(--gold);
+  margin-top: 2px;
+}
+.help .hlist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.help .hlist li {
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: #d6d2cb;
+}
+.help .hlist b {
+  display: inline-block;
+  min-width: 38px;
+  color: var(--text);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+
+.levelpick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 26px 14px;
+  text-align: center;
+}
+.levelpick .big {
+  font-size: 64px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.levelpick .btn {
+  width: 52px;
+  height: 52px;
+  font-size: 22px;
+}
+.navhint {
+  flex: 1;
+  text-align: center;
+}
+@media (max-width: 900px) {
+  .help {
+    order: -1;
+  }
+}
