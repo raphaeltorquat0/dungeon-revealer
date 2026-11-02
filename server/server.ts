@@ -19,6 +19,7 @@ import { EventEmitter } from "events";
 import type { getEnv } from "./env";
 import createGraphQLRouter from "./routes/graphql";
 import createNotesRouter from "./routes/notes";
+import createCharactersRouter from "./routes/characters";
 import type {
   ErrorRequestHandler,
   RequestHandler,
@@ -215,6 +216,13 @@ export const bootstrapServer = async (env: ReturnType<typeof getEnv>) => {
   apiRouter.use(fileRouter);
   app.use(graphqlRouter);
   apiRouter.use(notesImportRouter);
+  apiRouter.use(
+    createCharactersRouter({
+      roleMiddleware,
+      dataDirectory: env.DATA_DIRECTORY,
+      io,
+    })
+  );
 
   app.use("/api", apiRouter);
 
@@ -229,6 +237,10 @@ export const bootstrapServer = async (env: ReturnType<typeof getEnv>) => {
   });
 
   app.get("/dm", (_, res) => {
+    res.send(indexHtmlContent);
+  });
+
+  app.get("/fichas", (_, res) => {
     res.send(indexHtmlContent);
   });
 
