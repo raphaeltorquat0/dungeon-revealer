@@ -313,7 +313,7 @@
     const inner = c.portrait
       ? `<img src="${esc(c.portrait)}" alt="">`
       : cls
-      ? icon(cls.identifier, 48)
+      ? window.glyph(cls.identifier, 56)
       : esc((c.name.trim()[0] || "?").toUpperCase());
     const lvl = R.totalLevel(c);
     return `<div class="portrait">${inner}${
@@ -454,7 +454,7 @@
     const pending = R.decisions(SRD, c).filter((d) => !R.isDecisionDone(d));
     const t = s.traits;
     const ab = R.ABILITIES.map(
-      (k) => `<div class="frame ab"><div class="k">${icon(k, 15)}${
+      (k) => `<div class="frame ab"><div class="k">${window.glyph(k, 16)}${
         R.ABILITY_SHORT[k]
       }</div><div class="n">${R.ABILITY_LABEL[k]}</div>
       <div class="m">${sg(s.modifiers[k])}</div><div class="s">${
@@ -698,7 +698,9 @@
           <div class="line">${esc(classLine(c))}</div>
           <div class="sub">${
             c.player ? "Jogador: " + esc(c.player) : ""
-          } <span id="save-status">${esc(store.status)}</span></div></div>
+          } <span id="save-status">${
+      state.sample ? "" : esc(store.status)
+    }</span></div></div>
         <div class="head-actions">
           <button class="btn" data-act="rest-short" title="Descanso Curto">${icon(
             "moon",
@@ -1449,23 +1451,29 @@
     },
   ];
 
-  const optCard = (d, on, act, sub, tags) => `<button class="frame opt ${
+  // kv: [[rótulo, valor], ...] mostrados como uma pequena tabela no pé do cartão
+  const optCard = (d, on, act, sub, kv) => `<button class="opt ${
     on ? "on" : ""
   }" data-act="${act}" data-id="${d.id}" aria-pressed="${on}">
-      <span class="ico">${icon(
-        d.identifier,
-        28
-      )}</span><span class="check">${icon("check", 12)}</span>
+      ${window.emblem(d.identifier, 54, on)}<span class="check">${icon(
+    "check",
+    12
+  )}</span>
       <span style="min-width:0"><b>${esc(d.name)}</b>${
-    sub
-      ? `<span class="sub" style="display:block;margin:3px 0 5px">${esc(
-          sub
-        )}</span>`
+    sub ? `<span class="tagline">${esc(sub)}</span>` : ""
+  }</span>${
+    kv && kv.length
+      ? `<span class="kv">${kv
+          .filter((x) => x && x[1])
+          .map(
+            ([k, v]) =>
+              `<span><i>${esc(k)}</i><em title="${esc(v)}">${esc(
+                v
+              )}</em></span>`
+          )
+          .join("")}</span>`
       : ""
-  }${(tags || [])
-    .filter(Boolean)
-    .map((t) => `<span class="tag">${esc(t)}</span>`)
-    .join("")}</span></button>`;
+  }</button>`;
 
   const detailPanel = (d) => {
     if (!d) return "";
@@ -1476,10 +1484,11 @@
       .flatMap((a) => a.config.items || [])
       .map(doc)
       .filter(Boolean);
-    return `<div class="frame"><div style="display:flex;gap:12px;align-items:center"><span class="opt on" style="padding:0;border:0;background:none"><span class="ico" style="width:58px;height:58px">${icon(
+    return `<div class="frame"><div style="display:flex;gap:12px;align-items:center">${window.emblem(
       d.identifier,
-      34
-    )}</span></span>
+      64,
+      true
+    )}
         <div><div style="font-size:22px;font-weight:800;letter-spacing:-.01em">${esc(
           d.name
         )}</div><div class="sub">${esc(
@@ -1626,22 +1635,42 @@
               : R.BACKGROUND_LORE[d.identifier],
             isSp
               ? [
-                  "Deslocamento " + m((d.movement && d.movement.walk) || 30),
-                  d.senses && d.senses.darkvision
-                    ? "Visão no escuro " + m(d.senses.darkvision)
-                    : "",
+                  ["Desloc.", m((d.movement && d.movement.walk) || 30)],
+                  [
+                    "Visão",
+                    d.senses && d.senses.darkvision
+                      ? m(d.senses.darkvision)
+                      : "—",
+                  ],
+                  [
+                    "Tamanho",
+                    (
+                      (d.advancement || []).find((x) => x.type === "Size") || {
+                        config: { sizes: ["med"] },
+                      }
+                    ).config.sizes
+                      .map((z) => R.SIZE_LABEL[z])
+                      .join(" ou "),
+                  ],
                 ]
-              : (d.advancement || []).flatMap((a) =>
-                  a.type === "Trait"
-                    ? (a.config.grants || [])
-                        .filter((g) => g.startsWith("skills:"))
-                        .map((g) => R.traitLabel(SRD, g))
-                    : a.type === "ItemGrant"
-                    ? (a.config.items || []).map(
-                        (id) => doc(id) && doc(id).name
-                      )
-                    : []
-                )
+              : (() => {
+                  const skills = (d.advancement || []).flatMap((a) =>
+                    a.type === "Trait"
+                      ? (a.config.grants || [])
+                          .filter((g) => g.startsWith("skills:"))
+                          .map((g) => R.traitLabel(SRD, g))
+                      : []
+                  );
+                  const feat = (d.advancement || [])
+                    .flatMap((a) =>
+                      a.type === "ItemGrant" ? a.config.items || [] : []
+                    )
+                    .map((id) => doc(id) && doc(id).name)[0];
+                  return [
+                    ["Perícias", skills.join(", ")],
+                    ["Talento", feat],
+                  ];
+                })()
           )
         )
         .join("");
@@ -1665,13 +1694,16 @@
             "setclass",
             (R.CLASS_LORE[d.identifier] || {}).tagline,
             [
-              "Dado de Vida " + d.hitDie,
-              ((d.primaryAbility && d.primaryAbility.value) || [])
-                .map((k) => R.ABILITY_SHORT[k])
-                .join(
-                  d.primaryAbility && d.primaryAbility.all ? " e " : " ou "
-                ),
-              (R.CLASS_LORE[d.identifier] || {}).role,
+              ["Dado de Vida", d.hitDie],
+              [
+                "Principal",
+                ((d.primaryAbility && d.primaryAbility.value) || [])
+                  .map((k) => R.ABILITY_SHORT[k])
+                  .join(
+                    d.primaryAbility && d.primaryAbility.all ? " e " : " ou "
+                  ),
+              ],
+              ["Papel", (R.CLASS_LORE[d.identifier] || {}).role],
             ]
           )
         )
@@ -1725,16 +1757,29 @@
         <span class="sub" style="margin-left:auto" id="save-status">${esc(
           store.status
         )}</span></div>
-      <nav class="steps" aria-label="Passos">${STEPS.map(
-        (s, i) =>
-          `<button class="${i === state.step ? "on" : ""} ${
-            s.done(c) ? "done" : ""
-          }" data-act="step" data-i="${i}" aria-current="${
-            i === state.step ? "step" : "false"
-          }"><span class="num">${
-            s.done(c) && i !== state.step ? icon("check", 15) : i + 1
-          }</span><span class="lbl">${s.title}</span></button>`
-      ).join("")}</nav>
+      <nav class="stepper" aria-label="Passos">${STEPS.map((s, i) => {
+        const done = s.done(c);
+        const on = i === state.step;
+        return `<button class="stp ${on ? "on" : ""} ${
+          done ? "done" : ""
+        }" data-act="step" data-i="${i}" aria-current="${
+          on ? "step" : "false"
+        }">
+          <span class="b">${
+            done && !on ? icon("check", 14) : `<span>${i + 1}</span>`
+          }</span>
+          <span class="t"><span class="n">Passo ${
+            i + 1
+          }</span><span class="l">${s.title}</span><span class="st">${
+          on ? "Em andamento" : done ? "Concluído" : "Pendente"
+        }</span></span>
+        </button>`;
+      }).join("")}<span class="rail"><div style="width:${Math.round(
+      (STEPS.filter((x) => x.done(c)).length / STEPS.length) * 100
+    )}%"></div></span></nav>
+      <div class="progress-line"><b>${
+        STEPS.filter((x) => x.done(c)).length
+      } de ${STEPS.length}</b> passos concluídos</div>
       <div class="step-title"><h2>${step.title}</h2><span class="sub">Passo ${
       state.step + 1
     } de ${STEPS.length}</span></div>
