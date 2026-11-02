@@ -305,6 +305,11 @@ export const bootstrapServer = async (env: ReturnType<typeof getEnv>) => {
 
       socketIOGraphQLServer.registerSocket(socket);
 
+      // espelho do mestre -> janela do projetor (?controle / ?segue)
+      socket.on("view:set", (view) => {
+        socket.broadcast.emit("view:set", view);
+      });
+
       socket.emit("authenticated");
     });
 

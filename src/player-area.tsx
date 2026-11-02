@@ -93,6 +93,50 @@ const PlayerMap = ({
   const controlRef = React.useRef<MapControlInterface | null>(null);
   const [markedAreas, setMarkedAreas] = React.useState<MarkedArea[]>(() => []);
 
+  // Posição e zoom em fração da tela, para janelas de tamanhos diferentes.
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("segue")) {
+      const onView = ([x, y, scale]: [number, number, number]) => {
+        const context = controlRef.current?.getContext();
+        context?.setMapState({
+          position: [
+            x * context.viewport.width,
+            y * context.viewport.height,
+            0,
+          ],
+          scale: [scale, scale, 1],
+          immediate: true,
+        });
+      };
+      socket.on("view:set", onView);
+      return () => {
+        socket.off("view:set", onView);
+      };
+    }
+    if (params.has("controle")) {
+      let last = "";
+      const timer = setInterval(() => {
+        const context = controlRef.current?.getContext();
+        if (!context) {
+          return;
+        }
+        const position = context.mapState.position.get();
+        const view = [
+          position[0] / context.viewport.width,
+          position[1] / context.viewport.height,
+          context.mapState.scale.get()[0],
+        ];
+        const key = JSON.stringify(view);
+        if (key !== last) {
+          last = key;
+          socket.emit("view:set", view);
+        }
+      }, 80);
+      return () => clearInterval(timer);
+    }
+  }, [socket]);
+
   React.useEffect(() => {
     const contextmenuListener = (ev: Event) => {
       ev.preventDefault();
