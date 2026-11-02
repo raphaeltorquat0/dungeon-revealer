@@ -122,8 +122,12 @@ export type ActiveAdvancement = {
   /** Nível que vale para este avanço (nível da classe dona, ou 0 para origem). */
   level: number;
   classIndex: number | null;
+  /** De onde vem: espécie, antecedente ou classe (para agrupar no assistente). */
+  root: Root;
   key: string;
 };
+
+export type Root = "species" | "background" | "class";
 
 const advKey = (doc: SrdDoc, adv: Advancement) => `${doc.id}/${adv.id}`;
 
@@ -138,6 +142,7 @@ export const activeAdvancements = (
     docId: string | undefined,
     level: number,
     classIndex: number | null,
+    root: Root,
     // características de classe usam o nível da classe; o próprio documento de origem usa 0
     gate: (adv: Advancement) => boolean
   ) => {
@@ -151,6 +156,7 @@ export const activeAdvancements = (
         adv,
         level,
         classIndex,
+        root,
         key: advKey(doc, adv),
       };
       out.push(entry);
@@ -167,14 +173,15 @@ export const activeAdvancements = (
           child,
           level,
           classIndex,
+          root,
           (a) => (a.level ?? 0) <= Math.max(level, 0)
         );
       }
     }
   };
 
-  walk(c.speciesId, 0, null, (a) => (a.level ?? 0) <= 0);
-  walk(c.backgroundId, 0, null, (a) => (a.level ?? 0) <= 0);
+  walk(c.speciesId, 0, null, "species", (a) => (a.level ?? 0) <= 0);
+  walk(c.backgroundId, 0, null, "background", (a) => (a.level ?? 0) <= 0);
   c.classes.forEach((entry, index) => {
     const gate = (a: Advancement) => {
       if ((a.level ?? 1) > entry.level) return false;
@@ -182,8 +189,8 @@ export const activeAdvancements = (
       if (a.classRestriction === "secondary" && index === 0) return false;
       return true;
     };
-    walk(entry.classId, entry.level, index, gate);
-    walk(entry.subclassId, entry.level, index, gate);
+    walk(entry.classId, entry.level, index, "class", gate);
+    walk(entry.subclassId, entry.level, index, "class", gate);
   });
   return out;
 };
@@ -266,7 +273,16 @@ const restrictedOptions = (
 // ---------------------------------------------------------------------------
 // Decisões
 
-export type Decision =
+export type Decision = DecisionBody & {
+  root: Root;
+  classIndex: number | null;
+  /** Nível atual da classe dona (0 para origem). */
+  level: number;
+  /** Nível em que a escolha aparece pela primeira vez. */
+  advLevel: number;
+};
+
+type DecisionBody =
   | {
       kind: "pick";
       key: string;
@@ -325,6 +341,15 @@ export const decisions = (srd: Srd, c: Character): Decision[] => {
   const proficient = traits(srd, c, active);
 
   for (const a of active) {
+    const push = (d: DecisionBody) =>
+      // espalhar uma união perde o discriminante; a forma final continua correta
+      out.push({
+        ...d,
+        root: a.root,
+        classIndex: a.classIndex,
+        level: a.level,
+        advLevel: a.adv.level ?? 0,
+      } as Decision);
     const { doc, adv, key, level } = a;
     const title = adv.title || doc.name;
     if (adv.type === "Trait") {
@@ -338,7 +363,7 @@ export const decisions = (srd: Srd, c: Character): Decision[] => {
           const mine = new Set(c.choices[`${key}#${i}`] ?? []);
           options = options.filter((o) => mine.has(o) || !proficient.has(o));
         }
-        out.push({
+        push({
           kind: "pick",
           key: `${key}#${i}`,
           title,
@@ -357,7 +382,7 @@ export const decisions = (srd: Srd, c: Character): Decision[] => {
       const pool: string[] = adv.config.pool?.length
         ? adv.config.pool
         : restrictedOptions(srd, adv.config.restriction, adv.config.type);
-      out.push({
+      push({
         kind: "pick",
         key,
         title,
@@ -377,7 +402,7 @@ export const decisions = (srd: Srd, c: Character): Decision[] => {
       );
       const featChosen = (c.choices[key] ?? []).length > 0;
       const points = adv.config.points ?? 2;
-      out.push({
+      push({
         kind: "asi",
         key,
         title: background
@@ -409,7 +434,7 @@ export const decisions = (srd: Srd, c: Character): Decision[] => {
     } else if (adv.type === "Subclass" && a.classIndex !== null) {
       const entry = c.classes[a.classIndex];
       const classDoc = srd.docs[entry.classId];
-      out.push({
+      push({
         kind: "subclass",
         key,
         title: "Subclasse",
@@ -425,7 +450,7 @@ export const decisions = (srd: Srd, c: Character): Decision[] => {
         done: Boolean(entry.subclassId),
       });
     } else if (adv.type === "Size" && (adv.config.sizes ?? []).length > 1) {
-      out.push({
+      push({
         kind: "size",
         key,
         title: "Tamanho",
@@ -643,6 +668,20 @@ export const grantedFeatures = (
         .map((doc) => ({ doc, source: a.doc }))
     );
 
+/** Magias vindas de talentos e traços (Iniciado em Magia, linhagens...): sempre preparadas. */
+export const grantedSpells = (srd: Srd, c: Character) =>
+  activeAdvancements(srd, c)
+    .filter((a) => a.adv.type === "ItemGrant" || a.adv.type === "ItemChoice")
+    .flatMap((a) =>
+      (
+        (a.adv.type === "ItemGrant"
+          ? a.adv.config.items
+          : c.choices[a.key] ?? []) as string[]
+      )
+        .filter((id) => srd.docs[id]?.type === "spell")
+        .map((id) => ({ id, source: a.doc }))
+    );
+
 export type Attack = {
   name: string;
   toHit: number;
@@ -766,7 +805,8 @@ export const sheet = (srd: Srd, c: Character) => {
         toHit: m + (proficient ? prof : 0),
         damage: m ? `${dice} ${m > 0 ? "+" : "−"} ${Math.abs(m)}` : dice,
         damageType: w.damage?.types?.[0] ?? "",
-        properties: props,
+        // só propriedades de regra (foco e mágica são marcações internas)
+        properties: props.filter((p) => !["foc", "mgc"].includes(p)),
         mastery,
         range: w.range?.value
           ? `${w.range.value}${w.range.long ? "/" + w.range.long : ""}`

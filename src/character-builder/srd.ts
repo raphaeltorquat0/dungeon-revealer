@@ -273,3 +273,27 @@ export const feetToMeters = (feet: number) =>
   `${(feet * 0.3).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} m`;
 
 export const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
+
+/** Nome legível de uma chave de traço ("skills:arc", "weapon:mar:longsword", "languages:standard:elvish"...). */
+export const traitLabel = (srd: Srd, key: string): string => {
+  const [kind, sub, rest] = key.split(":");
+  if (kind === "expertise" || kind === "mastery")
+    return traitLabel(srd, key.slice(kind.length + 1));
+  if (kind === "skills") return SKILLS[sub]?.label ?? sub;
+  if (kind === "saves") return ABILITY_LABEL[sub as AbilityKey] ?? sub;
+  if (kind === "languages") return LANGUAGES[rest ?? sub]?.label ?? rest ?? sub;
+  if (kind === "dr")
+    return `Resistência a dano ${DAMAGE_LABEL[sub]?.toLowerCase() ?? sub}`;
+  if (kind === "armor") return ARMOR_LABEL[sub] ?? sub;
+  const byBase = (base: string, type: string) =>
+    Object.values(srd.docs).find(
+      (d) => d.type === type && !d.rarity && d.itemType?.baseItem === base
+    )?.name;
+  if (kind === "weapon")
+    return rest ? byBase(rest, "weapon") ?? rest : WEAPON_LABEL[sub] ?? sub;
+  if (kind === "tool")
+    return rest
+      ? byBase(rest, "tool") ?? rest
+      : byBase(sub, "tool") ?? TOOL_CATEGORY_LABEL[sub] ?? sub;
+  return key;
+};

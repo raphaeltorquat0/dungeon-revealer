@@ -22,6 +22,9 @@ SKILL = {"acr": ("dex", "Acrobatics"), "ani": ("wis", "Animal Handling"), "arc":
 TOOL = {"thief": "Thieves' Tools", "herb": "Herbalism Kit", "pois": "Poisoner's Kit", "disg": "Disguise Kit"}
 
 
+DEFAULT_DAMAGE = None
+
+
 def enricher(kind, args):
     """Converte comandos do Foundry ([[/save ...]] etc.) em texto corrido, em inglês, para depois traduzir."""
     kv = dict(x.split("=", 1) for x in args.split() if "=" in x)
@@ -35,8 +38,12 @@ def enricher(kind, args):
     if kind == "award":
         return re.sub(r"(\d+)\s*([A-Za-z]+)", r"\1 \2", args.strip()).upper().replace("GP", "GP")
     if kind in ("damage", "healing"):
-        formula = " ".join(pos)
-        t = kv.get("type", "")
+        types = {"acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic", "piercing",
+                 "poison", "psychic", "radiant", "slashing", "thunder", "healing"}
+        t = kv.get("type") or next((x for x in pos if x in types), "")
+        formula = " ".join(x for x in pos if x not in types) or kv.get("formula", "")
+        if not formula and DEFAULT_DAMAGE:  # [[/damage]] sem argumentos usa o dano da própria magia
+            formula, t = DEFAULT_DAMAGE[0], t or DEFAULT_DAMAGE[1]
         return f"{formula} Hit Points" if kind == "healing" or t == "healing" else f"{formula} {t.capitalize()}"
     if kind == "save":
         ab = kv.get("ability") or next((x for x in pos if x in ABILITY), "")
@@ -115,8 +122,18 @@ def equipment_list(system):
     return out
 
 
+def first_damage(system):
+    for act in (system.get("activities") or {}).values():
+        for part in ((act.get("damage") or {}).get("parts") or []):
+            if part.get("denomination"):
+                return f"{part.get('number') or 1}d{part['denomination']}", (part.get("types") or [""])[0]
+    return None
+
+
 def item(d, pack):
+    global DEFAULT_DAMAGE
     s = d.get("system") or {}
+    DEFAULT_DAMAGE = first_damage(s)
     base = {"id": d["_id"], "pack": pack, "type": d["type"], "name": d["name"],
             "identifier": s.get("identifier"), "description": clean_html((s.get("description") or {}).get("value"))}
     t = d["type"]

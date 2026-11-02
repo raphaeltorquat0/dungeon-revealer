@@ -25,6 +25,7 @@ import graphql from "babel-plugin-relay/macro";
 import { ReactRelayContext, useFragment, useMutation } from "relay-hooks";
 import * as Icon from "../feather-icons";
 import { Toolbar } from "../toolbar";
+import { buildUrl } from "../public-url";
 import { animated, to } from "@react-spring/web";
 import { ChatPositionContext } from "../authenticated-app-shell";
 import type { MapTool } from "../map-tools/map-tool";
@@ -960,6 +961,16 @@ export const DmMap = (props: {
                   >
                     <Icon.BookOpen boxSize="20px" />
                     <Icon.Label>Notes</Icon.Label>
+                  </Toolbar.Button>
+                </Toolbar.Item>
+                <Toolbar.Item isActive>
+                  <Toolbar.Button
+                    onClick={() => {
+                      window.open(buildUrl("/fichas"), "fichas");
+                    }}
+                  >
+                    <Icon.Users boxSize="20px" />
+                    <Icon.Label>Fichas</Icon.Label>
                   </Toolbar.Button>
                 </Toolbar.Item>
               </Toolbar.Group>
